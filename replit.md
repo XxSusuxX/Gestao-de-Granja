@@ -1,6 +1,6 @@
-# [Project name]
+# Gestão da Granja
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Sistema mobile-first para pequenos criadores de galinhas controlarem estoque, movimentações e contas com poucos toques.
 
 ## Run & Operate
 
@@ -22,19 +22,26 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/gestao-granja` — interface web responsiva e fluxos principais
+- `artifacts/api-server/src/routes/farm.ts` — operações da granja
+- `lib/api-spec/openapi.yaml` — contrato da API e origem do codegen
+- `lib/db/src/schema/` — tabelas de produtos, movimentações e contas
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Estoque é atualizado por movimentações de entrada e saída; não permitir saída maior que o saldo.
+- Valores financeiros são guardados em centavos para evitar erros de arredondamento.
+- Os números anotados à mão nas fotos são referências não confirmadas e não devem ser cadastrados como dados reais.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Visão geral com ações rápidas, alertas de estoque mínimo e totais em aberto.
+- Cadastro de produtos e histórico de entradas/saídas; opções rápidas incluem ração, milho, soja, núcleo, sal, calcário e remédios.
+- Contas a pagar e a receber, com vencimento, edição e marcação como resolvida.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Os clientes pediram botões intuitivos e o mínimo possível de digitação.
 
 ## Gotchas
 

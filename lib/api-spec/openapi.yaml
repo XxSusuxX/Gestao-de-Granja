@@ -10,6 +10,12 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: inventory
+    description: Farm inventory and stock movements
+  - name: finance
+    description: Payables and receivables
+  - name: dashboard
+    description: Farm overview
 paths:
   /healthz:
     get:
@@ -24,6 +30,222 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /dashboard:
+    get:
+      operationId: getDashboard
+      tags: [dashboard]
+      summary: Get farm overview
+      responses:
+        "200":
+          description: Summary of inventory and pending finances
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard"
+  /inventory/products:
+    get:
+      operationId: getProducts
+      tags: [inventory]
+      summary: List inventory products
+      responses:
+        "200":
+          description: Product list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+    post:
+      operationId: createProduct
+      tags: [inventory]
+      summary: Add an inventory product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductInput"
+      responses:
+        "201":
+          description: Product created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+  /inventory/products/{productId}:
+    patch:
+      operationId: updateProduct
+      tags: [inventory]
+      summary: Edit an inventory product
+      parameters:
+        - in: path
+          name: productId
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductUpdate"
+      responses:
+        "200":
+          description: Product updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "404":
+          description: Product not found
+    delete:
+      operationId: deleteProduct
+      tags: [inventory]
+      summary: Delete an inventory product
+      parameters:
+        - in: path
+          name: productId
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "204":
+          description: Product deleted
+        "404":
+          description: Product not found
+        "409":
+          description: Product cannot be deleted while it has stock history
+  /inventory/movements:
+    get:
+      operationId: getMovements
+      tags: [inventory]
+      summary: List stock movements
+      responses:
+        "200":
+          description: Stock movement list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Movement"
+    post:
+      operationId: createMovement
+      tags: [inventory]
+      summary: Add or remove stock
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MovementInput"
+      responses:
+        "201":
+          description: Stock movement recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Movement"
+        "400":
+          description: Invalid movement or insufficient stock
+        "404":
+          description: Product not found
+  /inventory/movements/{movementId}:
+    delete:
+      operationId: deleteMovement
+      tags: [inventory]
+      summary: Delete a movement and reverse its stock change
+      parameters:
+        - in: path
+          name: movementId
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "204":
+          description: Movement deleted and stock restored
+        "400":
+          description: Reversing this movement would make stock negative
+        "404":
+          description: Movement not found
+  /finance/entries:
+    get:
+      operationId: getFinanceEntries
+      tags: [finance]
+      summary: List payable and receivable entries
+      responses:
+        "200":
+          description: Finance entry list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FinanceEntry"
+    post:
+      operationId: createFinanceEntry
+      tags: [finance]
+      summary: Add a payable or receivable
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FinanceEntryInput"
+      responses:
+        "201":
+          description: Finance entry created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FinanceEntry"
+  /finance/entries/{entryId}:
+    patch:
+      operationId: updateFinanceEntry
+      tags: [finance]
+      summary: Edit or settle a payable or receivable
+      parameters:
+        - in: path
+          name: entryId
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FinanceEntryUpdate"
+      responses:
+        "200":
+          description: Finance entry updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FinanceEntry"
+        "404":
+          description: Finance entry not found
+    delete:
+      operationId: deleteFinanceEntry
+      tags: [finance]
+      summary: Delete a payable or receivable
+      parameters:
+        - in: path
+          name: entryId
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "204":
+          description: Finance entry deleted
+        "404":
+          description: Finance entry not found
 components:
   schemas:
     HealthStatus:
@@ -31,6 +253,180 @@ components:
       properties:
         status:
           type: string
+      required: [status]
+    Product:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        category:
+          type: string
+          enum: [feed, medicine, supplies, equipment, other]
+        unit:
+          type: string
+        quantity:
+          type: number
+        minimumQuantity:
+          type: ["number", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, name, category, unit, quantity, minimumQuantity, createdAt]
+    ProductInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        category:
+          type: string
+          enum: [feed, medicine, supplies, equipment, other]
+        unit:
+          type: string
+          minLength: 1
+        quantity:
+          type: number
+          minimum: 0
+        minimumQuantity:
+          type: ["number", "null"]
+      required: [name, category, unit, quantity]
+    ProductUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        category:
+          type: string
+          enum: [feed, medicine, supplies, equipment, other]
+        unit:
+          type: string
+          minLength: 1
+        minimumQuantity:
+          type: ["number", "null"]
+    Movement:
+      type: object
+      properties:
+        id:
+          type: integer
+        productId:
+          type: integer
+        productName:
+          type: string
+        direction:
+          type: string
+          enum: [in, out]
+        quantity:
+          type: number
+        note:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, productId, productName, direction, quantity, note, createdAt]
+    MovementInput:
+      type: object
+      properties:
+        productId:
+          type: integer
+          minimum: 1
+        direction:
+          type: string
+          enum: [in, out]
+        quantity:
+          type: number
+          exclusiveMinimum: 0
+        note:
+          type: string
+      required: [productId, direction, quantity]
+    FinanceEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        kind:
+          type: string
+          enum: [payable, receivable]
+        description:
+          type: string
+        amount:
+          type: number
+        dueDate:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [pending, settled]
+        category:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        settledAt:
+          type: ["string", "null"]
+          format: date-time
+      required: [id, kind, description, amount, dueDate, status, category, createdAt, settledAt]
+    FinanceEntryInput:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [payable, receivable]
+        description:
+          type: string
+          minLength: 1
+        amount:
+          type: number
+          exclusiveMinimum: 0
+        dueDate:
+          type: string
+          format: date
+        category:
+          type: string
+      required: [kind, description, amount, dueDate]
+    FinanceEntryUpdate:
+      type: object
+      properties:
+        description:
+          type: string
+          minLength: 1
+        amount:
+          type: number
+          exclusiveMinimum: 0
+        dueDate:
+          type: string
+          format: date
+        category:
+          type: string
+        status:
+          type: string
+          enum: [pending, settled]
+    Dashboard:
+      type: object
+      properties:
+        productCount:
+          type: integer
+        lowStockCount:
+          type: integer
+        pendingPayables:
+          type: number
+        pendingReceivables:
+          type: number
+        recentFinanceEntries:
+          type: array
+          items:
+            $ref: "#/components/schemas/FinanceEntry"
+        lowStockProducts:
+          type: array
+          items:
+            $ref: "#/components/schemas/Product"
       required:
-        - status
+        - productCount
+        - lowStockCount
+        - pendingPayables
+        - pendingReceivables
+        - recentFinanceEntries
+        - lowStockProducts
 
