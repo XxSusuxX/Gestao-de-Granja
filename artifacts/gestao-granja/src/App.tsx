@@ -19,6 +19,7 @@ import {
 import type { Product, Movement, FinanceEntry } from '@workspace/api-client-react';
 import { Link, Route, Switch, Router as WouterRouter, useLocation } from 'wouter';
 import NotFound from '@/pages/not-found';
+import { PoultryPage, FeedingPage } from '@/pages/poultry-feeding';
 
 const queryClient = new QueryClient();
 
@@ -35,10 +36,12 @@ const today = () => new Date().toISOString().slice(0, 10);
 function Shell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const [mobileMenu, setMobileMenu] = useState(false);
-  const active = location === '/estoque' ? 'estoque' : location === '/contas' ? 'contas' : 'inicio';
+  const active = location === '/estoque' ? 'estoque' : location === '/contas' ? 'contas' : location === '/aves' ? 'aves' : location === '/alimentacao' ? 'alimentacao' : 'inicio';
   const nav = [
     { id: 'inicio', href: '/', label: 'Visão geral', icon: Sprout },
     { id: 'estoque', href: '/estoque', label: 'Estoque', icon: Package },
+    { id: 'aves', href: '/aves', label: 'Aves', icon: Egg },
+    { id: 'alimentacao', href: '/alimentacao', label: 'Alimentação', icon: Leaf },
     { id: 'contas', href: '/contas', label: 'Contas', icon: Wallet },
   ];
   return <div className="app-shell">
@@ -97,17 +100,18 @@ function Modal({ title, eyebrow, children, onClose }: { title: string; eyebrow: 
   </div>;
 }
 
-function ProductForm({ initial, onSave, busy, onClose }: { initial?: Product; onSave: (data: { name: string; category: Product['category']; unit: string; quantity: number; minimumQuantity: number | null }) => void; busy: boolean; onClose: () => void }) {
+function ProductForm({ initial, onSave, busy, onClose }: { initial?: Product; onSave: (data: { name: string; category: Product['category']; unit: string; quantity: number; minimumQuantity: number | null; unitCost: number | null }) => void; busy: boolean; onClose: () => void }) {
   const [name, setName] = useState(initial?.name ?? '');
   const [category, setCategory] = useState<Product['category']>(initial?.category ?? 'feed');
   const [unit, setUnit] = useState(initial?.unit ?? 'kg');
   const [quantity, setQuantity] = useState(initial?.quantity.toString() ?? '');
   const [minimum, setMinimum] = useState(initial?.minimumQuantity?.toString() ?? '');
+  const [unitCost, setUnitCost] = useState(initial?.unitCost?.toString() ?? '');
   const categoryOptions: { key: Product['category']; label: string }[] = [
     { key: 'feed', label: 'Alimentação' }, { key: 'medicine', label: 'Remédios' },
     { key: 'supplies', label: 'Insumos' }, { key: 'equipment', label: 'Equipamentos' }, { key: 'other', label: 'Outros' },
   ];
-  return <form className="modal-form" onSubmit={e => { e.preventDefault(); onSave({ name: name.trim(), category, unit, quantity: Number(quantity), minimumQuantity: minimum ? Number(minimum) : null }); }}>
+  return <form className="modal-form" onSubmit={e => { e.preventDefault(); onSave({ name: name.trim(), category, unit, quantity: Number(quantity), minimumQuantity: minimum ? Number(minimum) : null, unitCost: unitCost ? Number(unitCost) : null }); }}>
     <label className="field-label">Nome do produto<input autoFocus required value={name} onChange={e => setName(e.target.value)} placeholder="Ex.: Ração postura" />
       {!initial && <div className="suggestion-row">{quickProducts.map(item => <button type="button" key={item} onClick={() => { setName(item); setCategory(item === 'Remédios' ? 'medicine' : item === 'Ração' ? 'feed' : 'supplies'); }} className="suggestion-chip">{item}</button>)}</div>}
     </label>
@@ -117,6 +121,7 @@ function ProductForm({ initial, onSave, busy, onClose }: { initial?: Product; on
       <label className="field-label">Unidade<select value={unit} onChange={e => setUnit(e.target.value)}><option value="kg">Quilos (kg)</option><option value="un">Unidades</option><option value="L">Litros (L)</option><option value="saco">Sacos</option><option value="dúzia">Dúzias</option></select></label>
     </div>
     <label className="field-label">Avisar quando chegar a<input type="number" min="0" step="any" value={minimum} onChange={e => setMinimum(e.target.value)} placeholder="Opcional — estoque mínimo" /></label>
+    <label className="field-label">Custo por unidade <span className="optional">opcional · usado nas receitas</span><input type="number" min="0" step="0.01" value={unitCost} onChange={e => setUnitCost(e.target.value)} placeholder="R$ 0,00" /></label>
     <div className="modal-actions"><button type="button" className="button secondary" onClick={onClose}>Cancelar</button><button className="button primary" disabled={busy || !name.trim() || !quantity}>{busy ? 'Salvando…' : initial ? 'Salvar alterações' : 'Adicionar ao estoque'}</button></div>
   </form>;
 }
@@ -182,7 +187,7 @@ function DashboardPage() {
   const todayLabel = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
   const onMovement = (input: { productId: number; direction: 'in' | 'out'; quantity: number; note: string }) => createMove.mutate({ data: input }, { onSuccess: () => { refresh(getGetMovementsQueryKey(), getGetProductsQueryKey(), getGetDashboardQueryKey()); setModal(null); } });
   const onFinance = (input: { kind: 'payable' | 'receivable'; description: string; amount: number; dueDate: string; category: string }) => createFinance.mutate({ data: input }, { onSuccess: () => { refresh(getGetFinanceEntriesQueryKey(), getGetDashboardQueryKey()); setModal(null); } });
-  const onProduct = (input: { name: string; category: Product['category']; unit: string; quantity: number; minimumQuantity: number | null }) => createProduct.mutate({ data: input }, { onSuccess: () => { refresh(getGetProductsQueryKey(), getGetDashboardQueryKey()); setModal(null); } });
+  const onProduct = (input: { name: string; category: Product['category']; unit: string; quantity: number; minimumQuantity: number | null; unitCost: number | null }) => createProduct.mutate({ data: input }, { onSuccess: () => { refresh(getGetProductsQueryKey(), getGetDashboardQueryKey()); setModal(null); } });
   const recent = (data?.recentFinanceEntries ?? []).slice(0, 4);
   return <div className="page-content">
     <PageHeading eyebrow="UM DIA DE CADA VEZ" title="Bom dia, vamos cuidar?" subtitle={`Seu resumo de hoje · ${todayLabel}`} />
@@ -237,8 +242,8 @@ function StockPage() {
   const [movementTab, setMovementTab] = useState<'recent' | 'all'>('recent');
   const list = products ?? [];
   const visibleProducts = useMemo(() => list.filter(p => (filter === 'todos' || p.category === filter) && p.name.toLowerCase().includes(search.toLowerCase())), [list, filter, search]);
-  const saveProduct = (input: { name: string; category: Product['category']; unit: string; quantity: number; minimumQuantity: number | null }) => {
-    if (editing) updateProduct.mutate({ productId: editing.id, data: { name: input.name, category: input.category, unit: input.unit, minimumQuantity: input.minimumQuantity } }, { onSuccess: () => { refresh(getGetProductsQueryKey(), getGetDashboardQueryKey()); setEditing(undefined); setModal(null); } });
+  const saveProduct = (input: { name: string; category: Product['category']; unit: string; quantity: number; minimumQuantity: number | null; unitCost: number | null }) => {
+    if (editing) updateProduct.mutate({ productId: editing.id, data: { name: input.name, category: input.category, unit: input.unit, minimumQuantity: input.minimumQuantity, unitCost: input.unitCost } }, { onSuccess: () => { refresh(getGetProductsQueryKey(), getGetDashboardQueryKey()); setEditing(undefined); setModal(null); } });
     else createProduct.mutate({ data: input }, { onSuccess: () => { refresh(getGetProductsQueryKey(), getGetDashboardQueryKey()); setModal(null); } });
   };
   const onMovement = (input: { productId: number; direction: 'in' | 'out'; quantity: number; note: string }) => createMovement.mutate({ data: input }, { onSuccess: () => { refresh(getGetProductsQueryKey(), getGetMovementsQueryKey(), getGetDashboardQueryKey()); setModal(null); } });
@@ -323,6 +328,8 @@ function Router() {
     <Route path="/" component={DashboardPage} />
     <Route path="/estoque" component={StockPage} />
     <Route path="/contas" component={FinancePage} />
+    <Route path="/aves" component={PoultryPage} />
+    <Route path="/alimentacao" component={FeedingPage} />
     <Route component={NotFound} />
   </Switch></Shell></ErrorBoundary>;
 }

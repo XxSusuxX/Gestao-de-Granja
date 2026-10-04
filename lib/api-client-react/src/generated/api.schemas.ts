@@ -28,6 +28,8 @@ export interface Product {
   quantity: number;
   /** @nullable */
   minimumQuantity: number | null;
+  /** @nullable */
+  unitCost: number | null;
   createdAt: string;
 }
 
@@ -52,6 +54,8 @@ export interface ProductInput {
   quantity: number;
   /** @nullable */
   minimumQuantity?: number | null;
+  /** @nullable */
+  unitCost?: number | null;
 }
 
 export type ProductUpdateCategory = typeof ProductUpdateCategory[keyof typeof ProductUpdateCategory];
@@ -73,6 +77,8 @@ export interface ProductUpdate {
   unit?: string;
   /** @nullable */
   minimumQuantity?: number | null;
+  /** @nullable */
+  unitCost?: number | null;
 }
 
 export type MovementDirection = typeof MovementDirection[keyof typeof MovementDirection];
@@ -184,5 +190,179 @@ export interface Dashboard {
   pendingReceivables: number;
   recentFinanceEntries: FinanceEntry[];
   lowStockProducts: Product[];
+}
+
+export type PoultryLotKind = typeof PoultryLotKind[keyof typeof PoultryLotKind];
+
+
+export const PoultryLotKind = {
+  layers: 'layers',
+  broilers: 'broilers',
+  chicks: 'chicks',
+  other: 'other',
+} as const;
+
+export interface PoultryLot {
+  id: number;
+  label: string;
+  kind: PoultryLotKind;
+  receivedAt: string;
+  /** @nullable */
+  source: string | null;
+  /** @nullable */
+  breed: string | null;
+  /** @nullable */
+  ageWeeks: number | null;
+  initialCount: number;
+  currentCount: number;
+  createdAt: string;
+}
+
+export type PoultryLotInputKind = typeof PoultryLotInputKind[keyof typeof PoultryLotInputKind];
+
+
+export const PoultryLotInputKind = {
+  layers: 'layers',
+  broilers: 'broilers',
+  chicks: 'chicks',
+  other: 'other',
+} as const;
+
+export interface PoultryLotInput {
+  /** @minLength 1 */
+  label: string;
+  kind: PoultryLotInputKind;
+  receivedAt: string;
+  source?: string;
+  breed?: string;
+  /** @minimum 0 */
+  ageWeeks?: number;
+  /** @minimum 1 */
+  initialCount: number;
+}
+
+export interface PoultryLotUpdate {
+  /** @minLength 1 */
+  label?: string;
+  /** @nullable */
+  source?: string | null;
+  /** @nullable */
+  breed?: string | null;
+  /** @nullable */
+  ageWeeks?: number | null;
+}
+
+export type PoultryDispatchInputReason = typeof PoultryDispatchInputReason[keyof typeof PoultryDispatchInputReason];
+
+
+export const PoultryDispatchInputReason = {
+  sale: 'sale',
+  transfer: 'transfer',
+  mortality: 'mortality',
+  other: 'other',
+} as const;
+
+export interface PoultryDispatchInput {
+  /** @minimum 1 */
+  quantity: number;
+  movementDate: string;
+  counterparty?: string;
+  reason: PoultryDispatchInputReason;
+}
+
+export type PoultryMovementDirection = typeof PoultryMovementDirection[keyof typeof PoultryMovementDirection];
+
+
+export const PoultryMovementDirection = {
+  in: 'in',
+  out: 'out',
+} as const;
+
+export interface PoultryMovement {
+  id: number;
+  lotId: number;
+  lotLabel: string;
+  direction: PoultryMovementDirection;
+  quantity: number;
+  movementDate: string;
+  /** @nullable */
+  counterparty: string | null;
+  /** @nullable */
+  reason: string | null;
+  createdAt: string;
+}
+
+export interface PoultrySummary {
+  activeLotCount: number;
+  liveBirdCount: number;
+}
+
+export interface RecipeIngredientInput {
+  /** @minimum 1 */
+  productId: number;
+  /** @exclusiveMinimum 0 */
+  quantityKg: number;
+}
+
+export interface RecipeIngredient {
+  productId: number;
+  productName: string;
+  quantityKg: number;
+  /** @nullable */
+  unitCost: number | null;
+  /** @nullable */
+  lineCost: number | null;
+  availableQuantity: number;
+}
+
+export interface FeedRecipeInput {
+  /** @minLength 1 */
+  name: string;
+  /** @minItems 1 */
+  ingredients: RecipeIngredientInput[];
+}
+
+export interface FeedRecipe {
+  id: number;
+  name: string;
+  batchWeightKg: number;
+  /** @nullable */
+  costPerBatch: number | null;
+  /** @nullable */
+  costPerKg: number | null;
+  ingredients: RecipeIngredient[];
+  createdAt: string;
+}
+
+export interface FeedLogInput {
+  /** @minimum 1 */
+  lotId: number;
+  /** @minimum 1 */
+  recipeId: number;
+  /** @exclusiveMinimum 0 */
+  quantityKg: number;
+  feedingDate: string;
+}
+
+export interface FeedLog {
+  id: number;
+  lotId: number;
+  lotLabel: string;
+  recipeId: number;
+  recipeName: string;
+  quantityKg: number;
+  /** @nullable */
+  totalCost: number | null;
+  feedingDate: string;
+  createdAt: string;
+}
+
+export interface FeedingSummary {
+  todayQuantityKg: number;
+  /** @nullable */
+  todayCost: number | null;
+  /** @nullable */
+  monthCost: number | null;
+  logsToday: number;
 }
 

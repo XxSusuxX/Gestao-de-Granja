@@ -24,6 +24,8 @@ export const movementsTable = pgTable("farm_stock_movements", {
   direction: movementDirectionEnum("direction").notNull(),
   quantity: doublePrecision("quantity").notNull(),
   note: text("note"),
+  sourceType: text("source_type"),
+  sourceId: integer("source_id"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

@@ -16,6 +16,10 @@ tags:
     description: Payables and receivables
   - name: dashboard
     description: Farm overview
+  - name: poultry
+    description: Poultry lots and bird movements
+  - name: feeding
+    description: Feed recipes and flock consumption
 paths:
   /healthz:
     get:
@@ -246,6 +250,282 @@ paths:
           description: Finance entry deleted
         "404":
           description: Finance entry not found
+  /poultry/summary:
+    get:
+      operationId: getPoultrySummary
+      tags: [poultry]
+      summary: Get poultry lot totals
+      responses:
+        "200":
+          description: Current flock totals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PoultrySummary"
+  /poultry/lots:
+    get:
+      operationId: getPoultryLots
+      tags: [poultry]
+      summary: List poultry lots
+      responses:
+        "200":
+          description: Poultry lots
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PoultryLot"
+    post:
+      operationId: createPoultryLot
+      tags: [poultry]
+      summary: Register an incoming poultry lot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PoultryLotInput"
+      responses:
+        "201":
+          description: Poultry lot registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PoultryLot"
+  /poultry/lots/{lotId}:
+    patch:
+      operationId: updatePoultryLot
+      tags: [poultry]
+      summary: Edit poultry lot details
+      parameters:
+        - in: path
+          name: lotId
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PoultryLotUpdate"
+      responses:
+        "200":
+          description: Poultry lot updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PoultryLot"
+        "404":
+          description: Poultry lot not found
+  /poultry/lots/{lotId}/dispatches:
+    post:
+      operationId: createPoultryDispatch
+      tags: [poultry]
+      summary: Record birds leaving a lot
+      parameters:
+        - in: path
+          name: lotId
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PoultryDispatchInput"
+      responses:
+        "201":
+          description: Bird dispatch recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PoultryMovement"
+        "400":
+          description: Invalid dispatch or too few birds in the lot
+        "404":
+          description: Poultry lot not found
+  /poultry/movements:
+    get:
+      operationId: getPoultryMovements
+      tags: [poultry]
+      summary: List poultry arrivals and departures
+      responses:
+        "200":
+          description: Poultry movement history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PoultryMovement"
+  /poultry/movements/{movementId}:
+    delete:
+      operationId: deletePoultryMovement
+      tags: [poultry]
+      summary: Delete a poultry movement and reverse its bird count
+      parameters:
+        - in: path
+          name: movementId
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "204":
+          description: Poultry movement deleted
+        "400":
+          description: Reversing this movement would make the lot count invalid
+        "404":
+          description: Poultry movement not found
+  /feeding/summary:
+    get:
+      operationId: getFeedingSummary
+      tags: [feeding]
+      summary: Get feeding totals
+      responses:
+        "200":
+          description: Daily and monthly feed totals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedingSummary"
+  /feeding/recipes:
+    get:
+      operationId: getFeedRecipes
+      tags: [feeding]
+      summary: List feed recipes
+      responses:
+        "200":
+          description: Feed recipes with ingredient costs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FeedRecipe"
+    post:
+      operationId: createFeedRecipe
+      tags: [feeding]
+      summary: Create a feed recipe
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FeedRecipeInput"
+      responses:
+        "201":
+          description: Feed recipe created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedRecipe"
+        "400":
+          description: Invalid recipe or ingredient
+  /feeding/recipes/{recipeId}:
+    patch:
+      operationId: updateFeedRecipe
+      tags: [feeding]
+      summary: Update a feed recipe
+      parameters:
+        - in: path
+          name: recipeId
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FeedRecipeInput"
+      responses:
+        "200":
+          description: Feed recipe updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedRecipe"
+        "400":
+          description: Invalid recipe or ingredient
+        "404":
+          description: Feed recipe not found
+    delete:
+      operationId: deleteFeedRecipe
+      tags: [feeding]
+      summary: Delete an unused feed recipe
+      parameters:
+        - in: path
+          name: recipeId
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "204":
+          description: Feed recipe deleted
+        "404":
+          description: Feed recipe not found
+        "409":
+          description: Recipe cannot be deleted after it has been used
+  /feeding/logs:
+    get:
+      operationId: getFeedLogs
+      tags: [feeding]
+      summary: List feed consumption records
+      responses:
+        "200":
+          description: Feeding history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FeedLog"
+    post:
+      operationId: createFeedLog
+      tags: [feeding]
+      summary: Record feed consumed by a poultry lot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FeedLogInput"
+      responses:
+        "201":
+          description: Feed consumption recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedLog"
+        "400":
+          description: Invalid feeding record or insufficient ingredient stock
+        "404":
+          description: Lot or recipe not found
+  /feeding/logs/{logId}:
+    delete:
+      operationId: deleteFeedLog
+      tags: [feeding]
+      summary: Delete a feed log and restore its ingredients to stock
+      parameters:
+        - in: path
+          name: logId
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "204":
+          description: Feeding record deleted and ingredients restored
+        "404":
+          description: Feeding record not found
 components:
   schemas:
     HealthStatus:
@@ -270,10 +550,12 @@ components:
           type: number
         minimumQuantity:
           type: ["number", "null"]
+        unitCost:
+          type: ["number", "null"]
         createdAt:
           type: string
           format: date-time
-      required: [id, name, category, unit, quantity, minimumQuantity, createdAt]
+      required: [id, name, category, unit, quantity, minimumQuantity, unitCost, createdAt]
     ProductInput:
       type: object
       properties:
@@ -291,6 +573,8 @@ components:
           minimum: 0
         minimumQuantity:
           type: ["number", "null"]
+        unitCost:
+          type: ["number", "null"]
       required: [name, category, unit, quantity]
     ProductUpdate:
       type: object
@@ -305,6 +589,8 @@ components:
           type: string
           minLength: 1
         minimumQuantity:
+          type: ["number", "null"]
+        unitCost:
           type: ["number", "null"]
     Movement:
       type: object
@@ -429,4 +715,225 @@ components:
         - pendingReceivables
         - recentFinanceEntries
         - lowStockProducts
+    PoultryLot:
+      type: object
+      properties:
+        id:
+          type: integer
+        label:
+          type: string
+        kind:
+          type: string
+          enum: [layers, broilers, chicks, other]
+        receivedAt:
+          type: string
+          format: date
+        source:
+          type: ["string", "null"]
+        breed:
+          type: ["string", "null"]
+        ageWeeks:
+          type: ["integer", "null"]
+        initialCount:
+          type: integer
+        currentCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, label, kind, receivedAt, source, breed, ageWeeks, initialCount, currentCount, createdAt]
+    PoultryLotInput:
+      type: object
+      properties:
+        label:
+          type: string
+          minLength: 1
+        kind:
+          type: string
+          enum: [layers, broilers, chicks, other]
+        receivedAt:
+          type: string
+          format: date
+        source:
+          type: string
+        breed:
+          type: string
+        ageWeeks:
+          type: integer
+          minimum: 0
+        initialCount:
+          type: integer
+          minimum: 1
+      required: [label, kind, receivedAt, initialCount]
+    PoultryLotUpdate:
+      type: object
+      properties:
+        label:
+          type: string
+          minLength: 1
+        source:
+          type: ["string", "null"]
+        breed:
+          type: ["string", "null"]
+        ageWeeks:
+          type: ["integer", "null"]
+    PoultryDispatchInput:
+      type: object
+      properties:
+        quantity:
+          type: integer
+          minimum: 1
+        movementDate:
+          type: string
+          format: date
+        counterparty:
+          type: string
+        reason:
+          type: string
+          enum: [sale, transfer, mortality, other]
+      required: [quantity, movementDate, reason]
+    PoultryMovement:
+      type: object
+      properties:
+        id:
+          type: integer
+        lotId:
+          type: integer
+        lotLabel:
+          type: string
+        direction:
+          type: string
+          enum: [in, out]
+        quantity:
+          type: integer
+        movementDate:
+          type: string
+          format: date
+        counterparty:
+          type: ["string", "null"]
+        reason:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, lotId, lotLabel, direction, quantity, movementDate, counterparty, reason, createdAt]
+    PoultrySummary:
+      type: object
+      properties:
+        activeLotCount:
+          type: integer
+        liveBirdCount:
+          type: integer
+      required: [activeLotCount, liveBirdCount]
+    RecipeIngredientInput:
+      type: object
+      properties:
+        productId:
+          type: integer
+          minimum: 1
+        quantityKg:
+          type: number
+          exclusiveMinimum: 0
+      required: [productId, quantityKg]
+    RecipeIngredient:
+      type: object
+      properties:
+        productId:
+          type: integer
+        productName:
+          type: string
+        quantityKg:
+          type: number
+        unitCost:
+          type: ["number", "null"]
+        lineCost:
+          type: ["number", "null"]
+        availableQuantity:
+          type: number
+      required: [productId, productName, quantityKg, unitCost, lineCost, availableQuantity]
+    FeedRecipeInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        ingredients:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/RecipeIngredientInput"
+      required: [name, ingredients]
+    FeedRecipe:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        batchWeightKg:
+          type: number
+        costPerBatch:
+          type: ["number", "null"]
+        costPerKg:
+          type: ["number", "null"]
+        ingredients:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecipeIngredient"
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, name, batchWeightKg, costPerBatch, costPerKg, ingredients, createdAt]
+    FeedLogInput:
+      type: object
+      properties:
+        lotId:
+          type: integer
+          minimum: 1
+        recipeId:
+          type: integer
+          minimum: 1
+        quantityKg:
+          type: number
+          exclusiveMinimum: 0
+        feedingDate:
+          type: string
+          format: date
+      required: [lotId, recipeId, quantityKg, feedingDate]
+    FeedLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        lotId:
+          type: integer
+        lotLabel:
+          type: string
+        recipeId:
+          type: integer
+        recipeName:
+          type: string
+        quantityKg:
+          type: number
+        totalCost:
+          type: ["number", "null"]
+        feedingDate:
+          type: string
+          format: date
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, lotId, lotLabel, recipeId, recipeName, quantityKg, totalCost, feedingDate, createdAt]
+    FeedingSummary:
+      type: object
+      properties:
+        todayQuantityKg:
+          type: number
+        todayCost:
+          type: ["number", "null"]
+        monthCost:
+          type: ["number", "null"]
+        logsToday:
+          type: integer
+      required: [todayQuantityKg, todayCost, monthCost, logsToday]
 

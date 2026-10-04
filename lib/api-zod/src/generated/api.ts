@@ -43,6 +43,7 @@ export const GetDashboardResponse = zod.object({
   "unit": zod.string(),
   "quantity": zod.number(),
   "minimumQuantity": zod.number().nullable(),
+  "unitCost": zod.number().nullable(),
   "createdAt": zod.coerce.date()
 }))
 })
@@ -58,6 +59,7 @@ export const GetProductsResponseItem = zod.object({
   "unit": zod.string(),
   "quantity": zod.number(),
   "minimumQuantity": zod.number().nullable(),
+  "unitCost": zod.number().nullable(),
   "createdAt": zod.coerce.date()
 })
 export const GetProductsResponse = zod.array(GetProductsResponseItem)
@@ -77,7 +79,8 @@ export const CreateProductBody = zod.object({
   "category": zod.enum(['feed', 'medicine', 'supplies', 'equipment', 'other']),
   "unit": zod.string().min(1),
   "quantity": zod.number().min(createProductBodyQuantityMin),
-  "minimumQuantity": zod.number().nullish()
+  "minimumQuantity": zod.number().nullish(),
+  "unitCost": zod.number().nullish()
 })
 
 export const CreateProductResponse = zod.object({
@@ -87,6 +90,7 @@ export const CreateProductResponse = zod.object({
   "unit": zod.string(),
   "quantity": zod.number(),
   "minimumQuantity": zod.number().nullable(),
+  "unitCost": zod.number().nullable(),
   "createdAt": zod.coerce.date()
 })
 
@@ -109,7 +113,8 @@ export const UpdateProductBody = zod.object({
   "name": zod.string().min(1).optional(),
   "category": zod.enum(['feed', 'medicine', 'supplies', 'equipment', 'other']).optional(),
   "unit": zod.string().min(1).optional(),
-  "minimumQuantity": zod.number().nullish()
+  "minimumQuantity": zod.number().nullish(),
+  "unitCost": zod.number().nullish()
 })
 
 export const UpdateProductResponse = zod.object({
@@ -119,6 +124,7 @@ export const UpdateProductResponse = zod.object({
   "unit": zod.string(),
   "quantity": zod.number(),
   "minimumQuantity": zod.number().nullable(),
+  "unitCost": zod.number().nullable(),
   "createdAt": zod.coerce.date()
 })
 
@@ -283,5 +289,346 @@ export const DeleteFinanceEntryParams = zod.object({
 })
 
 export const DeleteFinanceEntryResponse = zod.void()
+
+
+/**
+ * @summary Get poultry lot totals
+ */
+export const GetPoultrySummaryResponse = zod.object({
+  "activeLotCount": zod.number().int(),
+  "liveBirdCount": zod.number().int()
+})
+
+
+/**
+ * @summary List poultry lots
+ */
+export const GetPoultryLotsResponseItem = zod.object({
+  "id": zod.number().int(),
+  "label": zod.string(),
+  "kind": zod.enum(['layers', 'broilers', 'chicks', 'other']),
+  "receivedAt": zod.coerce.date(),
+  "source": zod.string().nullable(),
+  "breed": zod.string().nullable(),
+  "ageWeeks": zod.number().int().nullable(),
+  "initialCount": zod.number().int(),
+  "currentCount": zod.number().int(),
+  "createdAt": zod.coerce.date()
+})
+export const GetPoultryLotsResponse = zod.array(GetPoultryLotsResponseItem)
+
+
+/**
+ * @summary Register an incoming poultry lot
+ */
+
+export const createPoultryLotBodyAgeWeeksMin = 0;
+
+
+
+
+export const CreatePoultryLotBody = zod.object({
+  "label": zod.string().min(1),
+  "kind": zod.enum(['layers', 'broilers', 'chicks', 'other']),
+  "receivedAt": zod.coerce.date(),
+  "source": zod.string().optional(),
+  "breed": zod.string().optional(),
+  "ageWeeks": zod.number().int().min(createPoultryLotBodyAgeWeeksMin).optional(),
+  "initialCount": zod.number().int().min(1)
+})
+
+export const CreatePoultryLotResponse = zod.object({
+  "id": zod.number().int(),
+  "label": zod.string(),
+  "kind": zod.enum(['layers', 'broilers', 'chicks', 'other']),
+  "receivedAt": zod.coerce.date(),
+  "source": zod.string().nullable(),
+  "breed": zod.string().nullable(),
+  "ageWeeks": zod.number().int().nullable(),
+  "initialCount": zod.number().int(),
+  "currentCount": zod.number().int(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Edit poultry lot details
+ */
+
+
+
+export const UpdatePoultryLotParams = zod.object({
+  "lotId": zod.coerce.number().int().min(1)
+})
+
+
+
+
+export const UpdatePoultryLotBody = zod.object({
+  "label": zod.string().min(1).optional(),
+  "source": zod.string().nullish(),
+  "breed": zod.string().nullish(),
+  "ageWeeks": zod.number().int().nullish()
+})
+
+export const UpdatePoultryLotResponse = zod.object({
+  "id": zod.number().int(),
+  "label": zod.string(),
+  "kind": zod.enum(['layers', 'broilers', 'chicks', 'other']),
+  "receivedAt": zod.coerce.date(),
+  "source": zod.string().nullable(),
+  "breed": zod.string().nullable(),
+  "ageWeeks": zod.number().int().nullable(),
+  "initialCount": zod.number().int(),
+  "currentCount": zod.number().int(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Record birds leaving a lot
+ */
+
+
+
+export const CreatePoultryDispatchParams = zod.object({
+  "lotId": zod.coerce.number().int().min(1)
+})
+
+
+
+
+export const CreatePoultryDispatchBody = zod.object({
+  "quantity": zod.number().int().min(1),
+  "movementDate": zod.coerce.date(),
+  "counterparty": zod.string().optional(),
+  "reason": zod.enum(['sale', 'transfer', 'mortality', 'other'])
+})
+
+export const CreatePoultryDispatchResponse = zod.object({
+  "id": zod.number().int(),
+  "lotId": zod.number().int(),
+  "lotLabel": zod.string(),
+  "direction": zod.enum(['in', 'out']),
+  "quantity": zod.number().int(),
+  "movementDate": zod.coerce.date(),
+  "counterparty": zod.string().nullable(),
+  "reason": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary List poultry arrivals and departures
+ */
+export const GetPoultryMovementsResponseItem = zod.object({
+  "id": zod.number().int(),
+  "lotId": zod.number().int(),
+  "lotLabel": zod.string(),
+  "direction": zod.enum(['in', 'out']),
+  "quantity": zod.number().int(),
+  "movementDate": zod.coerce.date(),
+  "counterparty": zod.string().nullable(),
+  "reason": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+})
+export const GetPoultryMovementsResponse = zod.array(GetPoultryMovementsResponseItem)
+
+
+/**
+ * @summary Delete a poultry movement and reverse its bird count
+ */
+
+
+
+export const DeletePoultryMovementParams = zod.object({
+  "movementId": zod.coerce.number().int().min(1)
+})
+
+export const DeletePoultryMovementResponse = zod.void()
+
+
+/**
+ * @summary Get feeding totals
+ */
+export const GetFeedingSummaryResponse = zod.object({
+  "todayQuantityKg": zod.number(),
+  "todayCost": zod.number().nullable(),
+  "monthCost": zod.number().nullable(),
+  "logsToday": zod.number().int()
+})
+
+
+/**
+ * @summary List feed recipes
+ */
+export const GetFeedRecipesResponseItem = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "batchWeightKg": zod.number(),
+  "costPerBatch": zod.number().nullable(),
+  "costPerKg": zod.number().nullable(),
+  "ingredients": zod.array(zod.object({
+  "productId": zod.number().int(),
+  "productName": zod.string(),
+  "quantityKg": zod.number(),
+  "unitCost": zod.number().nullable(),
+  "lineCost": zod.number().nullable(),
+  "availableQuantity": zod.number()
+})),
+  "createdAt": zod.coerce.date()
+})
+export const GetFeedRecipesResponse = zod.array(GetFeedRecipesResponseItem)
+
+
+/**
+ * @summary Create a feed recipe
+ */
+
+
+export const createFeedRecipeBodyIngredientsItemQuantityKgExclusiveMin = 0;
+
+
+
+
+export const CreateFeedRecipeBody = zod.object({
+  "name": zod.string().min(1),
+  "ingredients": zod.array(zod.object({
+  "productId": zod.number().int().min(1),
+  "quantityKg": zod.number().gt(createFeedRecipeBodyIngredientsItemQuantityKgExclusiveMin)
+})).min(1)
+})
+
+export const CreateFeedRecipeResponse = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "batchWeightKg": zod.number(),
+  "costPerBatch": zod.number().nullable(),
+  "costPerKg": zod.number().nullable(),
+  "ingredients": zod.array(zod.object({
+  "productId": zod.number().int(),
+  "productName": zod.string(),
+  "quantityKg": zod.number(),
+  "unitCost": zod.number().nullable(),
+  "lineCost": zod.number().nullable(),
+  "availableQuantity": zod.number()
+})),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update a feed recipe
+ */
+
+
+
+export const UpdateFeedRecipeParams = zod.object({
+  "recipeId": zod.coerce.number().int().min(1)
+})
+
+
+
+export const updateFeedRecipeBodyIngredientsItemQuantityKgExclusiveMin = 0;
+
+
+
+
+export const UpdateFeedRecipeBody = zod.object({
+  "name": zod.string().min(1),
+  "ingredients": zod.array(zod.object({
+  "productId": zod.number().int().min(1),
+  "quantityKg": zod.number().gt(updateFeedRecipeBodyIngredientsItemQuantityKgExclusiveMin)
+})).min(1)
+})
+
+export const UpdateFeedRecipeResponse = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "batchWeightKg": zod.number(),
+  "costPerBatch": zod.number().nullable(),
+  "costPerKg": zod.number().nullable(),
+  "ingredients": zod.array(zod.object({
+  "productId": zod.number().int(),
+  "productName": zod.string(),
+  "quantityKg": zod.number(),
+  "unitCost": zod.number().nullable(),
+  "lineCost": zod.number().nullable(),
+  "availableQuantity": zod.number()
+})),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete an unused feed recipe
+ */
+
+
+
+export const DeleteFeedRecipeParams = zod.object({
+  "recipeId": zod.coerce.number().int().min(1)
+})
+
+export const DeleteFeedRecipeResponse = zod.void()
+
+
+/**
+ * @summary List feed consumption records
+ */
+export const GetFeedLogsResponseItem = zod.object({
+  "id": zod.number().int(),
+  "lotId": zod.number().int(),
+  "lotLabel": zod.string(),
+  "recipeId": zod.number().int(),
+  "recipeName": zod.string(),
+  "quantityKg": zod.number(),
+  "totalCost": zod.number().nullable(),
+  "feedingDate": zod.coerce.date(),
+  "createdAt": zod.coerce.date()
+})
+export const GetFeedLogsResponse = zod.array(GetFeedLogsResponseItem)
+
+
+/**
+ * @summary Record feed consumed by a poultry lot
+ */
+
+
+export const createFeedLogBodyQuantityKgExclusiveMin = 0;
+
+
+
+export const CreateFeedLogBody = zod.object({
+  "lotId": zod.number().int().min(1),
+  "recipeId": zod.number().int().min(1),
+  "quantityKg": zod.number().gt(createFeedLogBodyQuantityKgExclusiveMin),
+  "feedingDate": zod.coerce.date()
+})
+
+export const CreateFeedLogResponse = zod.object({
+  "id": zod.number().int(),
+  "lotId": zod.number().int(),
+  "lotLabel": zod.string(),
+  "recipeId": zod.number().int(),
+  "recipeName": zod.string(),
+  "quantityKg": zod.number(),
+  "totalCost": zod.number().nullable(),
+  "feedingDate": zod.coerce.date(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a feed log and restore its ingredients to stock
+ */
+
+
+
+export const DeleteFeedLogParams = zod.object({
+  "logId": zod.coerce.number().int().min(1)
+})
+
+export const DeleteFeedLogResponse = zod.void()
 
 

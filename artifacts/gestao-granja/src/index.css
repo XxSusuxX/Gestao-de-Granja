@@ -67,6 +67,51 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/* Poultry + feeding notebooks */
+.flock-hero,.feeding-banner{border-radius:20px;overflow:hidden;background:#e6eadc;border:1px solid #dce2d2;padding:27px 30px;margin:0 0 17px;display:flex;align-items:center;justify-content:space-between;gap:28px;position:relative}
+.flock-hero:after,.feeding-banner:after{content:"";position:absolute;width:230px;height:230px;border:1px solid #cdd8c5;border-radius:50%;right:36%;top:-152px;pointer-events:none}
+.flock-hero h2,.feeding-banner h2{font:600 29px/1.08 var(--app-font-serif);color:#294638;letter-spacing:-.4px;margin:12px 0 7px}
+.flock-hero p,.feeding-banner p{font-size:12px;color:#687d6b;margin:0;line-height:1.5}
+.hero-kicker{display:flex;align-items:center;gap:7px;color:#668069;font-size:9px;font-weight:700;letter-spacing:.13em}
+.flock-numbers{display:flex;gap:10px;position:relative;z-index:1}
+.flock-numbers>div{min-width:140px;padding:14px 17px;border-radius:14px;background:#f7f5ec;border:1px solid #dfe3d5;display:grid;gap:6px}
+.flock-numbers span,.feeding-stats span{font-size:9px;color:#79877a;font-weight:700;letter-spacing:.09em}
+.flock-numbers b{font:600 27px/1 var(--app-font-serif);color:#315841}
+.poultry-layout{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.lot-card{border-top:1px solid #efede5;padding:15px 0 13px}
+.lot-card-top{display:flex;align-items:center;gap:11px}
+.lot-icon,.flock-movement-icon,.recipe-mark,.feed-log-icon{height:37px;width:37px;border-radius:12px;display:grid;place-items:center;background:#e6ecdf;color:#507451;flex:none}
+.lot-title{display:grid;gap:4px;min-width:0;flex:1}.lot-title b{font-size:13px;color:#344d3e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lot-title small{font-size:10px;color:#899489}
+.lot-count{font:600 22px var(--app-font-serif);color:#355941;text-align:right}.lot-count small{font:500 9px var(--app-font-sans);color:#879286;display:block;text-align:right}
+.lot-meta{display:flex;gap:12px;flex-wrap:wrap;margin:10px 0 10px 48px;color:#879287;font-size:10px}
+.lot-actions{display:flex;gap:6px;margin-left:48px}.lot-actions .button{min-height:33px;padding:0 10px;font-size:10px}
+.lot-capacity{display:flex;align-items:center;gap:9px;padding:12px;border-radius:11px;background:#edf0e5;color:#526d55;font-size:12px}.lot-capacity b{margin-left:auto;color:#3c6245}
+.flock-history{align-self:start}
+.flock-movement{display:flex;align-items:center;gap:9px;padding:12px 0;border-top:1px solid #efede5}
+.flock-movement-icon{width:32px;height:32px;border-radius:10px}.flock-movement-icon.in{background:#e2ecdd;color:#4e7855}.flock-movement-icon.out{background:#f3e7d8;color:#a27a3b}
+.flock-movement-detail{display:grid;gap:3px;min-width:0;flex:1}.flock-movement-detail b{font-size:11px;color:#3a5040}.flock-movement-detail small{font-size:9px;color:#8a958b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.flock-quantity{font-size:12px;margin-right:3px}.flock-quantity.in{color:#55805a}.flock-quantity.out{color:#b27c3e}
+.feeding-banner{background:#f1e8d5;border-color:#e8ddc7;align-items:stretch}.feeding-banner:after{border-color:#e2d3b4;right:40%;top:-170px}.feed-banner-copy{align-self:center;z-index:1}.feed-banner-copy .hero-kicker{color:#92713d}.feed-banner-copy h2{color:#594932}.feed-banner-copy p{color:#867654}
+.feeding-stats{display:grid;grid-template-columns:repeat(3,minmax(115px,1fr));gap:8px;align-items:stretch;z-index:1}
+.feeding-stats>div{padding:13px 14px;border-radius:13px;background:#faf7ef;border:1px solid #e8dfcd;display:grid;align-content:center;gap:5px;min-width:0}
+.feeding-stats b{font:600 20px/1.1 var(--app-font-serif);color:#3b5942;white-space:nowrap}.feeding-stats small{font-size:9px;color:#93876e}
+.feeding-columns{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+.icon-add-button{height:36px;width:36px;border:1px solid #dedfd1;background:#f2f3e9;color:#567357;border-radius:11px;display:grid;place-items:center;cursor:pointer}
+.compact-button{min-height:34px;padding:0 10px;font-size:10px}
+.recipe-card{border:1px solid #ebe7dc;background:#fbfaf4;border-radius:13px;padding:13px;margin-top:10px}
+.recipe-card-head{display:flex;align-items:center;gap:10px}.recipe-mark{height:34px;width:34px;background:#f2e9d6;color:#a17a40}.recipe-card-head>div:nth-child(2){display:grid;gap:4px;flex:1;min-width:0}.recipe-card-head b{font-size:12px;color:#354d3d}.recipe-card-head small{font-size:9px;color:#899489}.recipe-actions{display:flex;gap:1px}
+.recipe-ingredients{display:flex;flex-wrap:wrap;gap:6px;padding:12px 0}.recipe-ingredients span{display:flex;align-items:center;gap:7px;padding:6px 8px;border-radius:8px;background:#eeefe6;font-size:9px;color:#728073}.recipe-ingredients b{color:#526b54}
+.recipe-cost{border-top:1px solid #eae7dc;padding-top:10px;display:flex;justify-content:space-between;gap:8px;align-items:center}.recipe-cost span{display:flex;gap:5px;align-items:center;font-size:9px;color:#839083}.recipe-cost>b{font-size:10px;color:#4c674f;text-align:right}.recipe-cost small{font-size:9px;color:#839083;font-weight:500}
+.recipe-footnote{font-size:9px;line-height:1.5;color:#929a8e;padding:12px 2px 0}
+.ingredient-picks{display:flex;flex-wrap:wrap;gap:6px;max-height:130px;overflow:auto}.ingredient-picks button{min-height:32px;border:1px solid #e2dfd3;background:#fffdf7;color:#5b715e;border-radius:9px;padding:0 9px;display:flex;align-items:center;gap:5px;font:600 10px var(--app-font-sans);cursor:pointer}.ingredient-picks button:disabled{opacity:.48;cursor:default}.ingredient-picks small{font-size:8px;color:#8d988c}
+.ingredient-line{display:grid;grid-template-columns:minmax(0,1fr) 120px 30px;gap:8px;align-items:center;border-top:1px solid #edeae0;padding-top:9px}.ingredient-line>span{display:grid;gap:4px}.ingredient-line>span b{font-size:11px;color:#435b48}.ingredient-line>span small{font-size:9px;color:#899489}.ingredient-line .field-label{font-size:9px;gap:4px}
+.feed-log-row{display:flex;align-items:center;gap:9px;padding:12px 0;border-top:1px solid #efede5}.feed-log-icon{height:32px;width:32px;border-radius:10px;background:#f2e9d6;color:#a17a40}.feed-log-copy{display:grid;gap:4px;min-width:0;flex:1}.feed-log-copy b{font-size:11px;color:#394f40}.feed-log-copy small{font-size:9px;color:#899489;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.feed-log-total{display:grid;gap:4px;text-align:right}.feed-log-total b{font-size:10px;color:#456147;white-space:nowrap}.feed-log-total small{font-size:9px;color:#8b968a;white-space:nowrap}
+.mobile-bottom-nav a{min-width:0}.mobile-bottom-nav a span{font-size:9px}
+.query-warning{margin:-12px 0 14px;padding:10px 13px;border:1px solid #e8d8c5;background:#f5eade;border-radius:10px;color:#815c3e;font-size:11px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.query-warning button{border:0;background:transparent;color:#5c7655;font:700 10px var(--app-font-sans);cursor:pointer;text-decoration:underline}
+@media(max-width:1050px){.feeding-banner{align-items:flex-start;flex-direction:column;gap:16px}.feeding-stats{width:100%}}
+@media(max-width:760px){.mobile-bottom-nav{grid-template-columns:repeat(5,minmax(0,1fr));padding-left:4px;padding-right:4px}.mobile-bottom-nav a{font-size:8px}.mobile-bottom-nav a span{font-size:8px}.poultry-layout,.feeding-columns{grid-template-columns:1fr;gap:10px}.flock-hero{padding:20px;display:block}.flock-hero h2,.feeding-banner h2{font-size:25px}.flock-numbers{margin-top:16px}.flock-numbers>div{min-width:0;flex:1;padding:12px}.flock-numbers b{font-size:23px}.feeding-banner{padding:21px}.feeding-stats{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.feeding-stats>div{padding:10px 8px}.feeding-stats span{font-size:7px;letter-spacing:.04em}.feeding-stats b{font-size:15px}.feeding-stats small{font-size:8px}.lot-meta{margin-left:0;gap:8px}.lot-actions{margin-left:0}.recipe-cost{align-items:flex-start;flex-direction:column}.recipe-cost>b{text-align:left}.ingredient-line{grid-template-columns:minmax(0,1fr) 100px 28px}.flock-history .section-title-row{align-items:flex-start}.heading-action{flex-wrap:wrap}.heading-action .button{flex:1}}
+@media(max-width:390px){.mobile-bottom-nav a span{font-size:7px}.flock-numbers>div{padding:10px 8px}.flock-numbers span{font-size:7px}.feeding-stats b{font-size:13px}.recipe-card{padding:10px}}
+
 /* LIGHT MODE */
 :root {
   --button-outline: rgba(0, 0, 0, 0.1);

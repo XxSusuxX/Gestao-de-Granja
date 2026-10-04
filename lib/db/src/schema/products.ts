@@ -1,5 +1,6 @@
 import {
   doublePrecision,
+  integer,
   pgEnum,
   pgTable,
   serial,
@@ -24,6 +25,7 @@ export const productsTable = pgTable("farm_products", {
   unit: text("unit").notNull(),
   quantity: doublePrecision("quantity").notNull().default(0),
   minimumQuantity: doublePrecision("minimum_quantity"),
+  unitCostCents: integer("unit_cost_cents"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

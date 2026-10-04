@@ -6,6 +6,7 @@ import {
 import { Router, type IRouter } from "express";
 import {
   db,
+  feedRecipeIngredientsTable,
   financeEntriesTable,
   movementsTable,
   productsTable,
@@ -41,7 +42,14 @@ const router: IRouter = Router();
 
 function presentProduct(product: Product) {
   return {
-    ...product,
+    id: product.id,
+    name: product.name,
+    category: product.category,
+    unit: product.unit,
+    quantity: product.quantity,
+    minimumQuantity: product.minimumQuantity,
+    unitCost:
+      product.unitCostCents === null ? null : product.unitCostCents / 100,
     createdAt: product.createdAt.toISOString(),
   };
 }
@@ -119,8 +127,15 @@ router.post("/inventory/products", async (req, res): Promise<void> => {
   const [product] = await db
     .insert(productsTable)
     .values({
-      ...parsed.data,
+      name: parsed.data.name.trim(),
+      category: parsed.data.category,
+      unit: parsed.data.unit.trim(),
+      quantity: parsed.data.quantity,
       minimumQuantity: parsed.data.minimumQuantity ?? null,
+      unitCostCents:
+        parsed.data.unitCost == null
+          ? null
+          : Math.round(parsed.data.unitCost * 100),
     })
     .returning();
   res.status(201).json(CreateProductResponse.parse(presentProduct(product)));
@@ -139,9 +154,41 @@ router.patch(
       res.status(400).json({ error: body.error.message });
       return;
     }
+    if (body.data.category !== undefined || body.data.unit !== undefined) {
+      const [usedInRecipe] = await db
+        .select({ id: feedRecipeIngredientsTable.id })
+        .from(feedRecipeIngredientsTable)
+        .where(eq(feedRecipeIngredientsTable.productId, params.data.productId))
+        .limit(1);
+      if (
+        usedInRecipe &&
+        (body.data.category !== undefined && body.data.category !== "feed" ||
+          body.data.unit !== undefined &&
+            body.data.unit.toLowerCase() !== "kg")
+      ) {
+        res.status(409).json({
+          error:
+            "Este ingrediente está em uma receita de ração e precisa continuar como Alimentação, em quilos.",
+        });
+        return;
+      }
+    }
+    const changes: Partial<typeof productsTable.$inferInsert> = {};
+    if (body.data.name !== undefined) changes.name = body.data.name.trim();
+    if (body.data.category !== undefined) changes.category = body.data.category;
+    if (body.data.unit !== undefined) changes.unit = body.data.unit.trim();
+    if (body.data.minimumQuantity !== undefined) {
+      changes.minimumQuantity = body.data.minimumQuantity ?? null;
+    }
+    if (body.data.unitCost !== undefined) {
+      changes.unitCostCents =
+        body.data.unitCost === null
+          ? null
+          : Math.round(body.data.unitCost * 100);
+    }
     const [product] = await db
       .update(productsTable)
-      .set(body.data)
+      .set(changes)
       .where(eq(productsTable.id, params.data.productId))
       .returning();
     if (!product) {
@@ -169,6 +216,18 @@ router.delete(
       res.status(409).json({
         error:
           "Este item tem histórico de estoque e não pode ser apagado. Edite o nome ou mantenha o cadastro.",
+      });
+      return;
+    }
+    const [recipeIngredient] = await db
+      .select({ id: feedRecipeIngredientsTable.id })
+      .from(feedRecipeIngredientsTable)
+      .where(eq(feedRecipeIngredientsTable.productId, params.data.productId))
+      .limit(1);
+    if (recipeIngredient) {
+      res.status(409).json({
+        error:
+          "Este item faz parte de uma receita de ração. Remova-o da receita antes de excluir o cadastro.",
       });
       return;
     }
@@ -286,6 +345,9 @@ router.delete(
         .where(eq(movementsTable.id, params.data.movementId))
         .for("update");
       if (!movement) return { error: "not_found" as const };
+      if (movement.sourceType === "feeding") {
+        return { error: "feeding_log" as const };
+      }
 
       const [product] = await tx
         .select()
@@ -313,6 +375,13 @@ router.delete(
     if ("error" in result) {
       if (result.error === "not_found") {
         res.status(404).json({ error: "Movimentação não encontrada." });
+        return;
+      }
+      if (result.error === "feeding_log") {
+        res.status(400).json({
+          error:
+            "Este movimento pertence a um registro de alimentação. Exclua o registro pela página de alimentação para restaurar o estoque.",
+        });
         return;
       }
       res.status(400).json({

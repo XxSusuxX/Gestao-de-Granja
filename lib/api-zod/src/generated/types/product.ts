@@ -15,5 +15,7 @@ export interface Product {
   quantity: number;
   /** @nullable */
   minimumQuantity: number | null;
+  /** @nullable */
+  unitCost: number | null;
   createdAt: Date;
 }

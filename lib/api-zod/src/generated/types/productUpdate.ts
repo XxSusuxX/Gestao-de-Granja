@@ -15,4 +15,6 @@ export interface ProductUpdate {
   unit?: string;
   /** @nullable */
   minimumQuantity?: number | null;
+  /** @nullable */
+  unitCost?: number | null;
 }

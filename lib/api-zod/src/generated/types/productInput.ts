@@ -17,4 +17,6 @@ export interface ProductInput {
   quantity: number;
   /** @nullable */
   minimumQuantity?: number | null;
+  /** @nullable */
+  unitCost?: number | null;
 }

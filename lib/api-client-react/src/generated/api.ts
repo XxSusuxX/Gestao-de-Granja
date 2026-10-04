@@ -21,12 +21,23 @@ import type {
 
 import type {
   Dashboard,
+  FeedLog,
+  FeedLogInput,
+  FeedRecipe,
+  FeedRecipeInput,
+  FeedingSummary,
   FinanceEntry,
   FinanceEntryInput,
   FinanceEntryUpdate,
   HealthStatus,
   Movement,
   MovementInput,
+  PoultryDispatchInput,
+  PoultryLot,
+  PoultryLotInput,
+  PoultryLotUpdate,
+  PoultryMovement,
+  PoultrySummary,
   Product,
   ProductInput,
   ProductUpdate
@@ -1107,5 +1118,1220 @@ export const useDeleteFinanceEntry = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getDeleteFinanceEntryMutationOptions(options));
+    }
+
+export const getGetPoultrySummaryUrl = () => {
+
+
+
+
+  return `/api/poultry/summary`
+}
+
+/**
+ * @summary Get poultry lot totals
+ */
+export const getPoultrySummary = async ( options?: Parameters<typeof customFetch>[1]): Promise<PoultrySummary> => {
+
+  return customFetch<PoultrySummary>(getGetPoultrySummaryUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPoultrySummaryQueryKey = () => {
+    return [
+    `/api/poultry/summary`
+    ] as const;
+    }
+
+
+export const getGetPoultrySummaryQueryOptions = <TData = Awaited<ReturnType<typeof getPoultrySummary>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPoultrySummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPoultrySummaryQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPoultrySummary>>> = ({ signal }) => getPoultrySummary({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPoultrySummary>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPoultrySummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getPoultrySummary>>>
+export type GetPoultrySummaryQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get poultry lot totals
+ */
+
+export function useGetPoultrySummary<TData = Awaited<ReturnType<typeof getPoultrySummary>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPoultrySummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPoultrySummaryQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetPoultryLotsUrl = () => {
+
+
+
+
+  return `/api/poultry/lots`
+}
+
+/**
+ * @summary List poultry lots
+ */
+export const getPoultryLots = async ( options?: Parameters<typeof customFetch>[1]): Promise<PoultryLot[]> => {
+
+  return customFetch<PoultryLot[]>(getGetPoultryLotsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPoultryLotsQueryKey = () => {
+    return [
+    `/api/poultry/lots`
+    ] as const;
+    }
+
+
+export const getGetPoultryLotsQueryOptions = <TData = Awaited<ReturnType<typeof getPoultryLots>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPoultryLots>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPoultryLotsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPoultryLots>>> = ({ signal }) => getPoultryLots({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPoultryLots>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPoultryLotsQueryResult = NonNullable<Awaited<ReturnType<typeof getPoultryLots>>>
+export type GetPoultryLotsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List poultry lots
+ */
+
+export function useGetPoultryLots<TData = Awaited<ReturnType<typeof getPoultryLots>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPoultryLots>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPoultryLotsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreatePoultryLotUrl = () => {
+
+
+
+
+  return `/api/poultry/lots`
+}
+
+/**
+ * @summary Register an incoming poultry lot
+ */
+export const createPoultryLot = async (poultryLotInput: PoultryLotInput, options?: Parameters<typeof customFetch>[1]): Promise<PoultryLot> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<PoultryLot>(getCreatePoultryLotUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(poultryLotInput)
+  }
+);}
+
+
+
+
+
+export const getCreatePoultryLotMutationKey = () => ['createPoultryLot'] as const;
+
+export const getCreatePoultryLotMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPoultryLot>>, TError,CreatePoultryLotMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createPoultryLot>>, TError,CreatePoultryLotMutationVariables, TContext> => {
+
+const mutationKey = getCreatePoultryLotMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPoultryLot>>, CreatePoultryLotMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createPoultryLot(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreatePoultryLotMutationResult = NonNullable<Awaited<ReturnType<typeof createPoultryLot>>>
+    export type CreatePoultryLotMutationBody = BodyType<PoultryLotInput>
+    export type CreatePoultryLotMutationError = ErrorType<unknown>
+    export type CreatePoultryLotMutationVariables = {data: BodyType<PoultryLotInput>}
+
+    /**
+ * @summary Register an incoming poultry lot
+ */
+export const useCreatePoultryLot = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPoultryLot>>, TError,CreatePoultryLotMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createPoultryLot>>,
+        TError,
+        CreatePoultryLotMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreatePoultryLotMutationOptions(options));
+    }
+
+export const getUpdatePoultryLotUrl = (lotId: number,) => {
+
+
+
+
+  return `/api/poultry/lots/${lotId}`
+}
+
+/**
+ * @summary Edit poultry lot details
+ */
+export const updatePoultryLot = async (lotId: number,
+    poultryLotUpdate: PoultryLotUpdate, options?: Parameters<typeof customFetch>[1]): Promise<PoultryLot> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<PoultryLot>(getUpdatePoultryLotUrl(lotId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(poultryLotUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdatePoultryLotMutationKey = () => ['updatePoultryLot'] as const;
+
+export const getUpdatePoultryLotMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePoultryLot>>, TError,UpdatePoultryLotMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updatePoultryLot>>, TError,UpdatePoultryLotMutationVariables, TContext> => {
+
+const mutationKey = getUpdatePoultryLotMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updatePoultryLot>>, UpdatePoultryLotMutationVariables> = (props) => {
+          const {lotId,data} = props ?? {};
+
+          return  updatePoultryLot(lotId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdatePoultryLotMutationResult = NonNullable<Awaited<ReturnType<typeof updatePoultryLot>>>
+    export type UpdatePoultryLotMutationBody = BodyType<PoultryLotUpdate>
+    export type UpdatePoultryLotMutationError = ErrorType<void>
+    export type UpdatePoultryLotMutationVariables = {lotId: number;data: BodyType<PoultryLotUpdate>}
+
+    /**
+ * @summary Edit poultry lot details
+ */
+export const useUpdatePoultryLot = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePoultryLot>>, TError,UpdatePoultryLotMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updatePoultryLot>>,
+        TError,
+        UpdatePoultryLotMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdatePoultryLotMutationOptions(options));
+    }
+
+export const getCreatePoultryDispatchUrl = (lotId: number,) => {
+
+
+
+
+  return `/api/poultry/lots/${lotId}/dispatches`
+}
+
+/**
+ * @summary Record birds leaving a lot
+ */
+export const createPoultryDispatch = async (lotId: number,
+    poultryDispatchInput: PoultryDispatchInput, options?: Parameters<typeof customFetch>[1]): Promise<PoultryMovement> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<PoultryMovement>(getCreatePoultryDispatchUrl(lotId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(poultryDispatchInput)
+  }
+);}
+
+
+
+
+
+export const getCreatePoultryDispatchMutationKey = () => ['createPoultryDispatch'] as const;
+
+export const getCreatePoultryDispatchMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPoultryDispatch>>, TError,CreatePoultryDispatchMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createPoultryDispatch>>, TError,CreatePoultryDispatchMutationVariables, TContext> => {
+
+const mutationKey = getCreatePoultryDispatchMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPoultryDispatch>>, CreatePoultryDispatchMutationVariables> = (props) => {
+          const {lotId,data} = props ?? {};
+
+          return  createPoultryDispatch(lotId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreatePoultryDispatchMutationResult = NonNullable<Awaited<ReturnType<typeof createPoultryDispatch>>>
+    export type CreatePoultryDispatchMutationBody = BodyType<PoultryDispatchInput>
+    export type CreatePoultryDispatchMutationError = ErrorType<void>
+    export type CreatePoultryDispatchMutationVariables = {lotId: number;data: BodyType<PoultryDispatchInput>}
+
+    /**
+ * @summary Record birds leaving a lot
+ */
+export const useCreatePoultryDispatch = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPoultryDispatch>>, TError,CreatePoultryDispatchMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createPoultryDispatch>>,
+        TError,
+        CreatePoultryDispatchMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreatePoultryDispatchMutationOptions(options));
+    }
+
+export const getGetPoultryMovementsUrl = () => {
+
+
+
+
+  return `/api/poultry/movements`
+}
+
+/**
+ * @summary List poultry arrivals and departures
+ */
+export const getPoultryMovements = async ( options?: Parameters<typeof customFetch>[1]): Promise<PoultryMovement[]> => {
+
+  return customFetch<PoultryMovement[]>(getGetPoultryMovementsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPoultryMovementsQueryKey = () => {
+    return [
+    `/api/poultry/movements`
+    ] as const;
+    }
+
+
+export const getGetPoultryMovementsQueryOptions = <TData = Awaited<ReturnType<typeof getPoultryMovements>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPoultryMovements>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPoultryMovementsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPoultryMovements>>> = ({ signal }) => getPoultryMovements({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPoultryMovements>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPoultryMovementsQueryResult = NonNullable<Awaited<ReturnType<typeof getPoultryMovements>>>
+export type GetPoultryMovementsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List poultry arrivals and departures
+ */
+
+export function useGetPoultryMovements<TData = Awaited<ReturnType<typeof getPoultryMovements>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPoultryMovements>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPoultryMovementsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDeletePoultryMovementUrl = (movementId: number,) => {
+
+
+
+
+  return `/api/poultry/movements/${movementId}`
+}
+
+/**
+ * @summary Delete a poultry movement and reverse its bird count
+ */
+export const deletePoultryMovement = async (movementId: number, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getDeletePoultryMovementUrl(movementId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeletePoultryMovementMutationKey = () => ['deletePoultryMovement'] as const;
+
+export const getDeletePoultryMovementMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePoultryMovement>>, TError,DeletePoultryMovementMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deletePoultryMovement>>, TError,DeletePoultryMovementMutationVariables, TContext> => {
+
+const mutationKey = getDeletePoultryMovementMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deletePoultryMovement>>, DeletePoultryMovementMutationVariables> = (props) => {
+          const {movementId} = props ?? {};
+
+          return  deletePoultryMovement(movementId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeletePoultryMovementMutationResult = NonNullable<Awaited<ReturnType<typeof deletePoultryMovement>>>
+
+    export type DeletePoultryMovementMutationError = ErrorType<void>
+    export type DeletePoultryMovementMutationVariables = {movementId: number}
+
+    /**
+ * @summary Delete a poultry movement and reverse its bird count
+ */
+export const useDeletePoultryMovement = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePoultryMovement>>, TError,DeletePoultryMovementMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deletePoultryMovement>>,
+        TError,
+        DeletePoultryMovementMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeletePoultryMovementMutationOptions(options));
+    }
+
+export const getGetFeedingSummaryUrl = () => {
+
+
+
+
+  return `/api/feeding/summary`
+}
+
+/**
+ * @summary Get feeding totals
+ */
+export const getFeedingSummary = async ( options?: Parameters<typeof customFetch>[1]): Promise<FeedingSummary> => {
+
+  return customFetch<FeedingSummary>(getGetFeedingSummaryUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFeedingSummaryQueryKey = () => {
+    return [
+    `/api/feeding/summary`
+    ] as const;
+    }
+
+
+export const getGetFeedingSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getFeedingSummary>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFeedingSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFeedingSummaryQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFeedingSummary>>> = ({ signal }) => getFeedingSummary({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFeedingSummary>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFeedingSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getFeedingSummary>>>
+export type GetFeedingSummaryQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get feeding totals
+ */
+
+export function useGetFeedingSummary<TData = Awaited<ReturnType<typeof getFeedingSummary>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFeedingSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFeedingSummaryQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetFeedRecipesUrl = () => {
+
+
+
+
+  return `/api/feeding/recipes`
+}
+
+/**
+ * @summary List feed recipes
+ */
+export const getFeedRecipes = async ( options?: Parameters<typeof customFetch>[1]): Promise<FeedRecipe[]> => {
+
+  return customFetch<FeedRecipe[]>(getGetFeedRecipesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFeedRecipesQueryKey = () => {
+    return [
+    `/api/feeding/recipes`
+    ] as const;
+    }
+
+
+export const getGetFeedRecipesQueryOptions = <TData = Awaited<ReturnType<typeof getFeedRecipes>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFeedRecipes>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFeedRecipesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFeedRecipes>>> = ({ signal }) => getFeedRecipes({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFeedRecipes>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFeedRecipesQueryResult = NonNullable<Awaited<ReturnType<typeof getFeedRecipes>>>
+export type GetFeedRecipesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List feed recipes
+ */
+
+export function useGetFeedRecipes<TData = Awaited<ReturnType<typeof getFeedRecipes>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFeedRecipes>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFeedRecipesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateFeedRecipeUrl = () => {
+
+
+
+
+  return `/api/feeding/recipes`
+}
+
+/**
+ * @summary Create a feed recipe
+ */
+export const createFeedRecipe = async (feedRecipeInput: FeedRecipeInput, options?: Parameters<typeof customFetch>[1]): Promise<FeedRecipe> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<FeedRecipe>(getCreateFeedRecipeUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(feedRecipeInput)
+  }
+);}
+
+
+
+
+
+export const getCreateFeedRecipeMutationKey = () => ['createFeedRecipe'] as const;
+
+export const getCreateFeedRecipeMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createFeedRecipe>>, TError,CreateFeedRecipeMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createFeedRecipe>>, TError,CreateFeedRecipeMutationVariables, TContext> => {
+
+const mutationKey = getCreateFeedRecipeMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createFeedRecipe>>, CreateFeedRecipeMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createFeedRecipe(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateFeedRecipeMutationResult = NonNullable<Awaited<ReturnType<typeof createFeedRecipe>>>
+    export type CreateFeedRecipeMutationBody = BodyType<FeedRecipeInput>
+    export type CreateFeedRecipeMutationError = ErrorType<void>
+    export type CreateFeedRecipeMutationVariables = {data: BodyType<FeedRecipeInput>}
+
+    /**
+ * @summary Create a feed recipe
+ */
+export const useCreateFeedRecipe = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createFeedRecipe>>, TError,CreateFeedRecipeMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createFeedRecipe>>,
+        TError,
+        CreateFeedRecipeMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateFeedRecipeMutationOptions(options));
+    }
+
+export const getUpdateFeedRecipeUrl = (recipeId: number,) => {
+
+
+
+
+  return `/api/feeding/recipes/${recipeId}`
+}
+
+/**
+ * @summary Update a feed recipe
+ */
+export const updateFeedRecipe = async (recipeId: number,
+    feedRecipeInput: FeedRecipeInput, options?: Parameters<typeof customFetch>[1]): Promise<FeedRecipe> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<FeedRecipe>(getUpdateFeedRecipeUrl(recipeId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(feedRecipeInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateFeedRecipeMutationKey = () => ['updateFeedRecipe'] as const;
+
+export const getUpdateFeedRecipeMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateFeedRecipe>>, TError,UpdateFeedRecipeMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateFeedRecipe>>, TError,UpdateFeedRecipeMutationVariables, TContext> => {
+
+const mutationKey = getUpdateFeedRecipeMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateFeedRecipe>>, UpdateFeedRecipeMutationVariables> = (props) => {
+          const {recipeId,data} = props ?? {};
+
+          return  updateFeedRecipe(recipeId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateFeedRecipeMutationResult = NonNullable<Awaited<ReturnType<typeof updateFeedRecipe>>>
+    export type UpdateFeedRecipeMutationBody = BodyType<FeedRecipeInput>
+    export type UpdateFeedRecipeMutationError = ErrorType<void>
+    export type UpdateFeedRecipeMutationVariables = {recipeId: number;data: BodyType<FeedRecipeInput>}
+
+    /**
+ * @summary Update a feed recipe
+ */
+export const useUpdateFeedRecipe = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateFeedRecipe>>, TError,UpdateFeedRecipeMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateFeedRecipe>>,
+        TError,
+        UpdateFeedRecipeMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateFeedRecipeMutationOptions(options));
+    }
+
+export const getDeleteFeedRecipeUrl = (recipeId: number,) => {
+
+
+
+
+  return `/api/feeding/recipes/${recipeId}`
+}
+
+/**
+ * @summary Delete an unused feed recipe
+ */
+export const deleteFeedRecipe = async (recipeId: number, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getDeleteFeedRecipeUrl(recipeId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteFeedRecipeMutationKey = () => ['deleteFeedRecipe'] as const;
+
+export const getDeleteFeedRecipeMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteFeedRecipe>>, TError,DeleteFeedRecipeMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteFeedRecipe>>, TError,DeleteFeedRecipeMutationVariables, TContext> => {
+
+const mutationKey = getDeleteFeedRecipeMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteFeedRecipe>>, DeleteFeedRecipeMutationVariables> = (props) => {
+          const {recipeId} = props ?? {};
+
+          return  deleteFeedRecipe(recipeId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteFeedRecipeMutationResult = NonNullable<Awaited<ReturnType<typeof deleteFeedRecipe>>>
+
+    export type DeleteFeedRecipeMutationError = ErrorType<void>
+    export type DeleteFeedRecipeMutationVariables = {recipeId: number}
+
+    /**
+ * @summary Delete an unused feed recipe
+ */
+export const useDeleteFeedRecipe = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteFeedRecipe>>, TError,DeleteFeedRecipeMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteFeedRecipe>>,
+        TError,
+        DeleteFeedRecipeMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteFeedRecipeMutationOptions(options));
+    }
+
+export const getGetFeedLogsUrl = () => {
+
+
+
+
+  return `/api/feeding/logs`
+}
+
+/**
+ * @summary List feed consumption records
+ */
+export const getFeedLogs = async ( options?: Parameters<typeof customFetch>[1]): Promise<FeedLog[]> => {
+
+  return customFetch<FeedLog[]>(getGetFeedLogsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFeedLogsQueryKey = () => {
+    return [
+    `/api/feeding/logs`
+    ] as const;
+    }
+
+
+export const getGetFeedLogsQueryOptions = <TData = Awaited<ReturnType<typeof getFeedLogs>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFeedLogs>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFeedLogsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFeedLogs>>> = ({ signal }) => getFeedLogs({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFeedLogs>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetFeedLogsQueryResult = NonNullable<Awaited<ReturnType<typeof getFeedLogs>>>
+export type GetFeedLogsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List feed consumption records
+ */
+
+export function useGetFeedLogs<TData = Awaited<ReturnType<typeof getFeedLogs>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFeedLogs>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetFeedLogsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateFeedLogUrl = () => {
+
+
+
+
+  return `/api/feeding/logs`
+}
+
+/**
+ * @summary Record feed consumed by a poultry lot
+ */
+export const createFeedLog = async (feedLogInput: FeedLogInput, options?: Parameters<typeof customFetch>[1]): Promise<FeedLog> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<FeedLog>(getCreateFeedLogUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(feedLogInput)
+  }
+);}
+
+
+
+
+
+export const getCreateFeedLogMutationKey = () => ['createFeedLog'] as const;
+
+export const getCreateFeedLogMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createFeedLog>>, TError,CreateFeedLogMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createFeedLog>>, TError,CreateFeedLogMutationVariables, TContext> => {
+
+const mutationKey = getCreateFeedLogMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createFeedLog>>, CreateFeedLogMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createFeedLog(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateFeedLogMutationResult = NonNullable<Awaited<ReturnType<typeof createFeedLog>>>
+    export type CreateFeedLogMutationBody = BodyType<FeedLogInput>
+    export type CreateFeedLogMutationError = ErrorType<void>
+    export type CreateFeedLogMutationVariables = {data: BodyType<FeedLogInput>}
+
+    /**
+ * @summary Record feed consumed by a poultry lot
+ */
+export const useCreateFeedLog = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createFeedLog>>, TError,CreateFeedLogMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createFeedLog>>,
+        TError,
+        CreateFeedLogMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateFeedLogMutationOptions(options));
+    }
+
+export const getDeleteFeedLogUrl = (logId: number,) => {
+
+
+
+
+  return `/api/feeding/logs/${logId}`
+}
+
+/**
+ * @summary Delete a feed log and restore its ingredients to stock
+ */
+export const deleteFeedLog = async (logId: number, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getDeleteFeedLogUrl(logId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteFeedLogMutationKey = () => ['deleteFeedLog'] as const;
+
+export const getDeleteFeedLogMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteFeedLog>>, TError,DeleteFeedLogMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteFeedLog>>, TError,DeleteFeedLogMutationVariables, TContext> => {
+
+const mutationKey = getDeleteFeedLogMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteFeedLog>>, DeleteFeedLogMutationVariables> = (props) => {
+          const {logId} = props ?? {};
+
+          return  deleteFeedLog(logId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteFeedLogMutationResult = NonNullable<Awaited<ReturnType<typeof deleteFeedLog>>>
+
+    export type DeleteFeedLogMutationError = ErrorType<void>
+    export type DeleteFeedLogMutationVariables = {logId: number}
+
+    /**
+ * @summary Delete a feed log and restore its ingredients to stock
+ */
+export const useDeleteFeedLog = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteFeedLog>>, TError,DeleteFeedLogMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteFeedLog>>,
+        TError,
+        DeleteFeedLogMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteFeedLogMutationOptions(options));
     }
 

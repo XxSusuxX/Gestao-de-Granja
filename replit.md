@@ -31,6 +31,8 @@ Sistema mobile-first para pequenos criadores de galinhas controlarem estoque, mo
 
 - Estoque é atualizado por movimentações de entrada e saída; não permitir saída maior que o saldo.
 - Valores financeiros são guardados em centavos para evitar erros de arredondamento.
+- Receitas usam apenas produtos da categoria Alimentação medidos em kg; consumo atualiza o estoque de ingredientes na mesma transação.
+- O custo da ração é estimado com o custo unitário informado para cada ingrediente; sem preço cadastrado, o custo deve aparecer como indisponível, nunca como zero.
 - Os números anotados à mão nas fotos são referências não confirmadas e não devem ser cadastrados como dados reais.
 
 ## Product
@@ -38,6 +40,8 @@ Sistema mobile-first para pequenos criadores de galinhas controlarem estoque, mo
 - Visão geral com ações rápidas, alertas de estoque mínimo e totais em aberto.
 - Cadastro de produtos e histórico de entradas/saídas; opções rápidas incluem ração, milho, soja, núcleo, sal, calcário e remédios.
 - Contas a pagar e a receber, com vencimento, edição e marcação como resolvida.
+- Cadastro de lotes de aves com entradas, saídas, saldo atual e histórico.
+- Receitas de ração, consumo por lote, baixa automática dos ingredientes no estoque e acompanhamento do custo estimado.
 
 ## User preferences
 
@@ -45,7 +49,8 @@ Sistema mobile-first para pequenos criadores de galinhas controlarem estoque, mo
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Para mudanças na API, atualizar `lib/api-spec/openapi.yaml` e executar codegen antes de usar os tipos.
+- Campos de data-only chegam como `Date` nas validações do servidor; converter para `YYYY-MM-DD` antes de salvar no banco.
 
 ## Pointers
 
