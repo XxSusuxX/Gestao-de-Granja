@@ -185,6 +185,14 @@ export function requireAuthMiddleware(
   next();
 }
 
+export function getReqUserId(req: Request): number {
+  const user = (req as Request & { user?: AuthUserPayload }).user;
+  if (!user || !user.id) {
+    throw new Error("Acesso protegido. Usuário não autenticado.");
+  }
+  return user.id;
+}
+
 // ============================================================================
 // Database row types (snake_case from Supabase PostgreSQL)
 // ============================================================================
@@ -199,6 +207,7 @@ interface SbUserRow {
 
 interface SbProductRow {
   id: number;
+  user_id?: number | null;
   name: string;
   category: "feed" | "medicine" | "supplies" | "equipment" | "other";
   unit: string;
@@ -212,6 +221,7 @@ interface SbProductRow {
 
 interface SbMovementRow {
   id: number;
+  user_id?: number | null;
   product_id: number;
   direction: "in" | "out";
   quantity: number;
@@ -223,6 +233,7 @@ interface SbMovementRow {
 
 interface SbFinanceRow {
   id: number;
+  user_id?: number | null;
   kind: "payable" | "receivable";
   description: string;
   amount_cents: number;
@@ -235,6 +246,7 @@ interface SbFinanceRow {
 
 interface SbPoultryLotRow {
   id: number;
+  user_id?: number | null;
   label: string;
   kind: "layers" | "broilers" | "chicks" | "other";
   received_at: string;
@@ -248,6 +260,7 @@ interface SbPoultryLotRow {
 
 interface SbPoultryMovementRow {
   id: number;
+  user_id?: number | null;
   lot_id: number;
   direction: "in" | "out";
   quantity: number;
@@ -259,12 +272,14 @@ interface SbPoultryMovementRow {
 
 interface SbRecipeRow {
   id: number;
+  user_id?: number | null;
   name: string;
   created_at: string;
 }
 
 interface SbRecipeIngredientRow {
   id: number;
+  user_id?: number | null;
   recipe_id: number;
   product_id: number;
   quantity_kg: number;
@@ -272,6 +287,7 @@ interface SbRecipeIngredientRow {
 
 interface SbFeedingLogRow {
   id: number;
+  user_id?: number | null;
   lot_id: number;
   recipe_id: number;
   lot_label_snapshot: string;
@@ -361,13 +377,14 @@ function presentFeedLog(log: SbFeedingLogRow) {
   };
 }
 
-async function loadRecipesFromSupabase() {
+async function loadRecipesFromSupabase(userId?: number) {
+  const userFilter = userId ? `user_id=eq.${userId}&` : "";
   const [recipes, ingredients, products] = await Promise.all([
-    sbFetch<SbRecipeRow[]>("farm_feed_recipes?select=*&order=name.asc"),
+    sbFetch<SbRecipeRow[]>(`farm_feed_recipes?${userFilter}select=*&order=name.asc`),
     sbFetch<SbRecipeIngredientRow[]>(
-      "farm_feed_recipe_ingredients?select=*&order=id.asc",
+      `farm_feed_recipe_ingredients?${userFilter}select=*&order=id.asc`,
     ),
-    sbFetch<SbProductRow[]>("farm_products?select=*"),
+    sbFetch<SbProductRow[]>(`farm_products?${userFilter}select=*`),
   ]);
 
   const productMap = new Map(products.map((p) => [p.id, p]));
@@ -621,11 +638,12 @@ supabaseRestRouter.get("/health", async (_req, res) => {
   }
 });
 
-supabaseRestRouter.post("/admin/clean-test-data", async (_req, res) => {
+supabaseRestRouter.post("/admin/clean-test-data", async (req, res) => {
   try {
+    const userId = getReqUserId(req);
     const [delProds, delFinance] = await Promise.allSettled([
-      sbFetch<SbProductRow[]>("farm_products?name=ilike.*teste*&select=id,name", { method: "DELETE" }),
-      sbFetch<SbFinanceRow[]>("farm_finance_entries?description=ilike.*teste*&select=id,description", { method: "DELETE" }),
+      sbFetch<SbProductRow[]>(`farm_products?user_id=eq.${userId}&name=ilike.*teste*&select=id,name`, { method: "DELETE" }),
+      sbFetch<SbFinanceRow[]>(`farm_finance_entries?user_id=eq.${userId}&description=ilike.*teste*&select=id,description`, { method: "DELETE" }),
     ]);
     const deletedProductsCount = delProds.status === "fulfilled" && Array.isArray(delProds.value) ? delProds.value.length : 0;
     const deletedFinanceCount = delFinance.status === "fulfilled" && Array.isArray(delFinance.value) ? delFinance.value.length : 0;
@@ -639,46 +657,56 @@ supabaseRestRouter.post("/admin/clean-test-data", async (_req, res) => {
   }
 });
 
-supabaseRestRouter.get("/dashboard", async (_req, res) => {
-  const [products, pendingEntries, recentEntries] = await Promise.all([
-    sbFetch<SbProductRow[]>("farm_products?select=*&order=name.asc"),
-    sbFetch<SbFinanceRow[]>(
-      "farm_finance_entries?status=eq.pending&select=*",
-    ),
-    sbFetch<SbFinanceRow[]>(
-      "farm_finance_entries?select=*&order=created_at.desc&limit=5",
-    ),
-  ]);
+supabaseRestRouter.get("/dashboard", async (req, res) => {
+  try {
+    const userId = getReqUserId(req);
+    const [products, pendingEntries, recentEntries] = await Promise.all([
+      sbFetch<SbProductRow[]>(`farm_products?user_id=eq.${userId}&select=*&order=name.asc`),
+      sbFetch<SbFinanceRow[]>(
+        `farm_finance_entries?user_id=eq.${userId}&status=eq.pending&select=*`,
+      ),
+      sbFetch<SbFinanceRow[]>(
+        `farm_finance_entries?user_id=eq.${userId}&select=*&order=created_at.desc&limit=5`,
+      ),
+    ]);
 
-  const lowStockProducts = products.filter(
-    (p) =>
-      p.minimum_quantity !== null &&
-      Number(p.quantity) <= Number(p.minimum_quantity),
-  );
+    const lowStockProducts = products.filter(
+      (p) =>
+        p.minimum_quantity !== null &&
+        Number(p.quantity) <= Number(p.minimum_quantity),
+    );
 
-  res.json(
-    GetDashboardResponse.parse({
-      productCount: products.length,
-      lowStockCount: lowStockProducts.length,
-      pendingPayables:
-        pendingEntries
-          .filter((e) => e.kind === "payable")
-          .reduce((s, e) => s + Number(e.amount_cents), 0) / 100,
-      pendingReceivables:
-        pendingEntries
-          .filter((e) => e.kind === "receivable")
-          .reduce((s, e) => s + Number(e.amount_cents), 0) / 100,
-      recentFinanceEntries: recentEntries.map(presentFinance),
-      lowStockProducts: lowStockProducts.map(presentProduct),
-    }),
-  );
+    res.json(
+      GetDashboardResponse.parse({
+        productCount: products.length,
+        lowStockCount: lowStockProducts.length,
+        pendingPayables:
+          pendingEntries
+            .filter((e) => e.kind === "payable")
+            .reduce((s, e) => s + Number(e.amount_cents), 0) / 100,
+        pendingReceivables:
+          pendingEntries
+            .filter((e) => e.kind === "receivable")
+            .reduce((s, e) => s + Number(e.amount_cents), 0) / 100,
+        recentFinanceEntries: recentEntries.map(presentFinance),
+        lowStockProducts: lowStockProducts.map(presentProduct),
+      }),
+    );
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Erro no dashboard." });
+  }
 });
 
-supabaseRestRouter.get("/inventory/products", async (_req, res) => {
-  const products = await sbFetch<SbProductRow[]>(
-    "farm_products?select=*&order=name.asc",
-  );
-  res.json(GetProductsResponse.parse(products.map(presentProduct)));
+supabaseRestRouter.get("/inventory/products", async (req, res) => {
+  try {
+    const userId = getReqUserId(req);
+    const products = await sbFetch<SbProductRow[]>(
+      `farm_products?user_id=eq.${userId}&select=*&order=name.asc`,
+    );
+    res.json(GetProductsResponse.parse(products.map(presentProduct)));
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Erro ao listar produtos." });
+  }
 });
 
 supabaseRestRouter.post("/inventory/products", async (req, res) => {
@@ -687,9 +715,11 @@ supabaseRestRouter.post("/inventory/products", async (req, res) => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+  const userId = getReqUserId(req);
   const [product] = await sbFetch<SbProductRow[]>("farm_products", {
     method: "POST",
     body: JSON.stringify({
+      user_id: userId,
       name: parsed.data.name.trim(),
       category: parsed.data.category,
       unit: parsed.data.unit.trim(),
@@ -1059,8 +1089,9 @@ supabaseRestRouter.post("/inventory/analyze-image", async (req, res) => {
     const rawFileName = String(req.body?.fileName ?? "").toLowerCase();
     const sig = parseImageSignature(rawSignature);
 
+    const userId = getReqUserId(req);
     const products = await sbFetch<SbProductRow[]>(
-      "farm_products?select=*&order=id.desc",
+      `farm_products?user_id=eq.${userId}&select=*&order=id.desc`,
     );
 
     // 0. Check for Vision AI API keys (Google Gemini or OpenAI)
@@ -1688,10 +1719,11 @@ supabaseRestRouter.patch("/inventory/products/:productId", async (req, res) => {
     res.status(400).json({ error: "Dados inválidos." });
     return;
   }
+  const userId = getReqUserId(req);
 
   if (body.data.category !== undefined || body.data.unit !== undefined) {
     const used = await sbFetch<SbRecipeIngredientRow[]>(
-      `farm_feed_recipe_ingredients?product_id=eq.${params.data.productId}&select=id&limit=1`,
+      `farm_feed_recipe_ingredients?product_id=eq.${params.data.productId}&user_id=eq.${userId}&select=id&limit=1`,
     );
     if (
       used.length > 0 &&
@@ -1728,7 +1760,7 @@ supabaseRestRouter.patch("/inventory/products/:productId", async (req, res) => {
   }
 
   const updated = await sbFetch<SbProductRow[]>(
-    `farm_products?id=eq.${params.data.productId}`,
+    `farm_products?id=eq.${params.data.productId}&user_id=eq.${userId}`,
     {
       method: "PATCH",
       body: JSON.stringify(patch),
@@ -1749,12 +1781,13 @@ supabaseRestRouter.delete(
       res.status(400).json({ error: params.error.message });
       return;
     }
+    const userId = getReqUserId(req);
     const [moves, recipeIngs] = await Promise.all([
       sbFetch<{ id: number }[]>(
-        `farm_stock_movements?product_id=eq.${params.data.productId}&select=id&limit=1`,
+        `farm_stock_movements?product_id=eq.${params.data.productId}&user_id=eq.${userId}&select=id&limit=1`,
       ),
       sbFetch<{ id: number }[]>(
-        `farm_feed_recipe_ingredients?product_id=eq.${params.data.productId}&select=id&limit=1`,
+        `farm_feed_recipe_ingredients?product_id=eq.${params.data.productId}&user_id=eq.${userId}&select=id&limit=1`,
       ),
     ]);
     if (moves.length > 0) {
@@ -1773,7 +1806,7 @@ supabaseRestRouter.delete(
     }
 
     const deleted = await sbFetch<SbProductRow[]>(
-      `farm_products?id=eq.${params.data.productId}`,
+      `farm_products?id=eq.${params.data.productId}&user_id=eq.${userId}`,
       { method: "DELETE" },
     );
     if (!deleted || deleted.length === 0) {
@@ -1784,12 +1817,13 @@ supabaseRestRouter.delete(
   },
 );
 
-supabaseRestRouter.get("/inventory/movements", async (_req, res) => {
+supabaseRestRouter.get("/inventory/movements", async (req, res) => {
+  const userId = getReqUserId(req);
   const [movements, products] = await Promise.all([
     sbFetch<SbMovementRow[]>(
-      "farm_stock_movements?select=*&order=created_at.desc",
+      `farm_stock_movements?user_id=eq.${userId}&select=*&order=created_at.desc`,
     ),
-    sbFetch<SbProductRow[]>("farm_products?select=id,name"),
+    sbFetch<SbProductRow[]>(`farm_products?user_id=eq.${userId}&select=id,name`),
   ]);
   const productNames = new Map(products.map((p) => [p.id, p.name]));
 
@@ -1814,9 +1848,10 @@ supabaseRestRouter.post("/inventory/movements", async (req, res) => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+  const userId = getReqUserId(req);
 
   const products = await sbFetch<SbProductRow[]>(
-    `farm_products?id=eq.${parsed.data.productId}&select=*&limit=1`,
+    `farm_products?id=eq.${parsed.data.productId}&user_id=eq.${userId}&select=*&limit=1`,
   );
   const product = products[0];
   if (!product) {
@@ -1839,7 +1874,7 @@ supabaseRestRouter.post("/inventory/movements", async (req, res) => {
       ? roundKg(Number(product.quantity) + parsed.data.quantity)
       : roundKg(Number(product.quantity) - parsed.data.quantity);
 
-  await sbFetch(`farm_products?id=eq.${product.id}`, {
+  await sbFetch(`farm_products?id=eq.${product.id}&user_id=eq.${userId}`, {
     method: "PATCH",
     body: JSON.stringify({ quantity: nextQuantity }),
   });
@@ -1847,6 +1882,7 @@ supabaseRestRouter.post("/inventory/movements", async (req, res) => {
   const [movement] = await sbFetch<SbMovementRow[]>("farm_stock_movements", {
     method: "POST",
     body: JSON.stringify({
+      user_id: userId,
       product_id: product.id,
       direction: parsed.data.direction,
       quantity: parsed.data.quantity,
@@ -1875,9 +1911,10 @@ supabaseRestRouter.delete(
       res.status(400).json({ error: params.error.message });
       return;
     }
+    const userId = getReqUserId(req);
 
     const moves = await sbFetch<SbMovementRow[]>(
-      `farm_stock_movements?id=eq.${params.data.movementId}&select=*&limit=1`,
+      `farm_stock_movements?id=eq.${params.data.movementId}&user_id=eq.${userId}&select=*&limit=1`,
     );
     const movement = moves[0];
     if (!movement) {
@@ -1893,7 +1930,7 @@ supabaseRestRouter.delete(
     }
 
     const products = await sbFetch<SbProductRow[]>(
-      `farm_products?id=eq.${movement.product_id}&select=*&limit=1`,
+      `farm_products?id=eq.${movement.product_id}&user_id=eq.${userId}&select=*&limit=1`,
     );
     const product = products[0];
     if (!product) {
@@ -1913,11 +1950,11 @@ supabaseRestRouter.delete(
       return;
     }
 
-    await sbFetch(`farm_products?id=eq.${product.id}`, {
+    await sbFetch(`farm_products?id=eq.${product.id}&user_id=eq.${userId}`, {
       method: "PATCH",
       body: JSON.stringify({ quantity: nextQuantity }),
     });
-    await sbFetch(`farm_stock_movements?id=eq.${movement.id}`, {
+    await sbFetch(`farm_stock_movements?id=eq.${movement.id}&user_id=eq.${userId}`, {
       method: "DELETE",
     });
 
@@ -1925,9 +1962,10 @@ supabaseRestRouter.delete(
   },
 );
 
-supabaseRestRouter.get("/finance/entries", async (_req, res) => {
+supabaseRestRouter.get("/finance/entries", async (req, res) => {
+  const userId = getReqUserId(req);
   const entries = await sbFetch<SbFinanceRow[]>(
-    "farm_finance_entries?select=*&order=due_date.asc,created_at.desc",
+    `farm_finance_entries?user_id=eq.${userId}&select=*&order=due_date.asc,created_at.desc`,
   );
   res.json(GetFinanceEntriesResponse.parse(entries.map(presentFinance)));
 });
@@ -1938,9 +1976,11 @@ supabaseRestRouter.post("/finance/entries", async (req, res) => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+  const userId = getReqUserId(req);
   const [entry] = await sbFetch<SbFinanceRow[]>("farm_finance_entries", {
     method: "POST",
     body: JSON.stringify({
+      user_id: userId,
       kind: parsed.data.kind,
       description: parsed.data.description.trim(),
       amount_cents: Math.round(parsed.data.amount * 100),
@@ -1958,6 +1998,7 @@ supabaseRestRouter.patch("/finance/entries/:entryId", async (req, res) => {
     res.status(400).json({ error: "Dados inválidos." });
     return;
   }
+  const userId = getReqUserId(req);
 
   const patch: Record<string, unknown> = {};
   if (body.data.description !== undefined) {
@@ -1979,7 +2020,7 @@ supabaseRestRouter.patch("/finance/entries/:entryId", async (req, res) => {
   }
 
   const updated = await sbFetch<SbFinanceRow[]>(
-    `farm_finance_entries?id=eq.${params.data.entryId}`,
+    `farm_finance_entries?id=eq.${params.data.entryId}&user_id=eq.${userId}`,
     {
       method: "PATCH",
       body: JSON.stringify(patch),
@@ -1998,8 +2039,9 @@ supabaseRestRouter.delete("/finance/entries/:entryId", async (req, res) => {
     res.status(400).json({ error: params.error.message });
     return;
   }
+  const userId = getReqUserId(req);
   const deleted = await sbFetch<SbFinanceRow[]>(
-    `farm_finance_entries?id=eq.${params.data.entryId}`,
+    `farm_finance_entries?id=eq.${params.data.entryId}&user_id=eq.${userId}`,
     { method: "DELETE" },
   );
   if (!deleted || deleted.length === 0) {
@@ -2009,9 +2051,10 @@ supabaseRestRouter.delete("/finance/entries/:entryId", async (req, res) => {
   res.status(204).json(DeleteFinanceEntryResponse.parse(undefined));
 });
 
-supabaseRestRouter.get("/poultry/summary", async (_req, res) => {
+supabaseRestRouter.get("/poultry/summary", async (req, res) => {
+  const userId = getReqUserId(req);
   const lots = await sbFetch<SbPoultryLotRow[]>(
-    "farm_poultry_lots?select=current_count",
+    `farm_poultry_lots?user_id=eq.${userId}&select=current_count`,
   );
   res.json(
     GetPoultrySummaryResponse.parse({
@@ -2021,9 +2064,10 @@ supabaseRestRouter.get("/poultry/summary", async (_req, res) => {
   );
 });
 
-supabaseRestRouter.get("/poultry/lots", async (_req, res) => {
+supabaseRestRouter.get("/poultry/lots", async (req, res) => {
+  const userId = getReqUserId(req);
   const lots = await sbFetch<SbPoultryLotRow[]>(
-    "farm_poultry_lots?select=*&order=received_at.desc,id.desc",
+    `farm_poultry_lots?user_id=eq.${userId}&select=*&order=received_at.desc,id.desc`,
   );
   res.json(GetPoultryLotsResponse.parse(lots.map(presentLot)));
 });
@@ -2034,10 +2078,12 @@ supabaseRestRouter.post("/poultry/lots", async (req, res) => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+  const userId = getReqUserId(req);
   const receivedAt = dateForDatabase(parsed.data.receivedAt);
   const [lot] = await sbFetch<SbPoultryLotRow[]>("farm_poultry_lots", {
     method: "POST",
     body: JSON.stringify({
+      user_id: userId,
       label: parsed.data.label.trim(),
       kind: parsed.data.kind,
       received_at: receivedAt,
@@ -2051,6 +2097,7 @@ supabaseRestRouter.post("/poultry/lots", async (req, res) => {
   await sbFetch("farm_poultry_movements", {
     method: "POST",
     body: JSON.stringify({
+      user_id: userId,
       lot_id: lot.id,
       direction: "in",
       quantity: parsed.data.initialCount,
@@ -2069,6 +2116,7 @@ supabaseRestRouter.patch("/poultry/lots/:lotId", async (req, res) => {
     res.status(400).json({ error: "Dados inválidos." });
     return;
   }
+  const userId = getReqUserId(req);
   const patch: Record<string, unknown> = {};
   if (body.data.label !== undefined) patch.label = body.data.label.trim();
   if (body.data.source !== undefined) {
@@ -2082,7 +2130,7 @@ supabaseRestRouter.patch("/poultry/lots/:lotId", async (req, res) => {
   }
 
   const updated = await sbFetch<SbPoultryLotRow[]>(
-    `farm_poultry_lots?id=eq.${params.data.lotId}`,
+    `farm_poultry_lots?id=eq.${params.data.lotId}&user_id=eq.${userId}`,
     {
       method: "PATCH",
       body: JSON.stringify(patch),
@@ -2104,9 +2152,10 @@ supabaseRestRouter.post(
       res.status(400).json({ error: "Dados inválidos." });
       return;
     }
+    const userId = getReqUserId(req);
 
     const lots = await sbFetch<SbPoultryLotRow[]>(
-      `farm_poultry_lots?id=eq.${params.data.lotId}&select=*&limit=1`,
+      `farm_poultry_lots?id=eq.${params.data.lotId}&user_id=eq.${userId}&select=*&limit=1`,
     );
     const lot = lots[0];
     if (!lot) {
@@ -2126,6 +2175,7 @@ supabaseRestRouter.post(
       {
         method: "POST",
         body: JSON.stringify({
+          user_id: userId,
           lot_id: lot.id,
           direction: "out",
           quantity: body.data.quantity,
@@ -2136,7 +2186,7 @@ supabaseRestRouter.post(
       },
     );
 
-    await sbFetch(`farm_poultry_lots?id=eq.${lot.id}`, {
+    await sbFetch(`farm_poultry_lots?id=eq.${lot.id}&user_id=eq.${userId}`, {
       method: "PATCH",
       body: JSON.stringify({
         current_count: lot.current_count - body.data.quantity,
@@ -2153,12 +2203,13 @@ supabaseRestRouter.post(
   },
 );
 
-supabaseRestRouter.get("/poultry/movements", async (_req, res) => {
+supabaseRestRouter.get("/poultry/movements", async (req, res) => {
+  const userId = getReqUserId(req);
   const [movements, lots] = await Promise.all([
     sbFetch<SbPoultryMovementRow[]>(
-      "farm_poultry_movements?select=*&order=movement_date.desc,id.desc",
+      `farm_poultry_movements?user_id=eq.${userId}&select=*&order=movement_date.desc,id.desc`,
     ),
-    sbFetch<SbPoultryLotRow[]>("farm_poultry_lots?select=id,label"),
+    sbFetch<SbPoultryLotRow[]>(`farm_poultry_lots?user_id=eq.${userId}&select=id,label`),
   ]);
   const lotLabels = new Map(lots.map((l) => [l.id, l.label]));
   res.json(
@@ -2178,8 +2229,9 @@ supabaseRestRouter.delete(
       res.status(400).json({ error: params.error.message });
       return;
     }
+    const userId = getReqUserId(req);
     const moves = await sbFetch<SbPoultryMovementRow[]>(
-      `farm_poultry_movements?id=eq.${params.data.movementId}&select=*&limit=1`,
+      `farm_poultry_movements?id=eq.${params.data.movementId}&user_id=eq.${userId}&select=*&limit=1`,
     );
     const movement = moves[0];
     if (!movement) {
@@ -2194,26 +2246,27 @@ supabaseRestRouter.delete(
       return;
     }
     const lots = await sbFetch<SbPoultryLotRow[]>(
-      `farm_poultry_lots?id=eq.${movement.lot_id}&select=*&limit=1`,
+      `farm_poultry_lots?id=eq.${movement.lot_id}&user_id=eq.${userId}&select=*&limit=1`,
     );
     const lot = lots[0];
     if (lot) {
-      await sbFetch(`farm_poultry_lots?id=eq.${lot.id}`, {
+      await sbFetch(`farm_poultry_lots?id=eq.${lot.id}&user_id=eq.${userId}`, {
         method: "PATCH",
         body: JSON.stringify({
           current_count: lot.current_count + movement.quantity,
         }),
       });
     }
-    await sbFetch(`farm_poultry_movements?id=eq.${movement.id}`, {
+    await sbFetch(`farm_poultry_movements?id=eq.${movement.id}&user_id=eq.${userId}`, {
       method: "DELETE",
     });
     res.status(204).json(DeletePoultryMovementResponse.parse(undefined));
   },
 );
 
-supabaseRestRouter.get("/feeding/summary", async (_req, res) => {
-  const logs = await sbFetch<SbFeedingLogRow[]>("farm_feeding_logs?select=*");
+supabaseRestRouter.get("/feeding/summary", async (req, res) => {
+  const userId = getReqUserId(req);
+  const logs = await sbFetch<SbFeedingLogRow[]>(`farm_feeding_logs?user_id=eq.${userId}&select=*`);
   const today = new Intl.DateTimeFormat("sv-SE", {
     timeZone: "America/Sao_Paulo",
   }).format(new Date());
@@ -2240,8 +2293,9 @@ supabaseRestRouter.get("/feeding/summary", async (_req, res) => {
   );
 });
 
-supabaseRestRouter.get("/feeding/recipes", async (_req, res) => {
-  res.json(GetFeedRecipesResponse.parse(await loadRecipesFromSupabase()));
+supabaseRestRouter.get("/feeding/recipes", async (req, res) => {
+  const userId = getReqUserId(req);
+  res.json(GetFeedRecipesResponse.parse(await loadRecipesFromSupabase(userId)));
 });
 
 supabaseRestRouter.post("/feeding/recipes", async (req, res) => {
@@ -2250,6 +2304,7 @@ supabaseRestRouter.post("/feeding/recipes", async (req, res) => {
     res.status(400).json({ error: body.error.message });
     return;
   }
+  const userId = getReqUserId(req);
   const uniqueIds = new Set(body.data.ingredients.map((i) => i.productId));
   if (uniqueIds.size !== body.data.ingredients.length) {
     res.status(400).json({
@@ -2257,7 +2312,7 @@ supabaseRestRouter.post("/feeding/recipes", async (req, res) => {
     });
     return;
   }
-  const products = await sbFetch<SbProductRow[]>("farm_products?select=*");
+  const products = await sbFetch<SbProductRow[]>(`farm_products?user_id=eq.${userId}&select=*`);
   const valid = body.data.ingredients.every((ing) => {
     const p = products.find((x) => x.id === ing.productId);
     return p && p.category === "feed" && p.unit.toLowerCase() === "kg";
@@ -2271,13 +2326,14 @@ supabaseRestRouter.post("/feeding/recipes", async (req, res) => {
 
   const [recipe] = await sbFetch<SbRecipeRow[]>("farm_feed_recipes", {
     method: "POST",
-    body: JSON.stringify({ name: body.data.name.trim() }),
+    body: JSON.stringify({ user_id: userId, name: body.data.name.trim() }),
   });
 
   await sbFetch("farm_feed_recipe_ingredients", {
     method: "POST",
     body: JSON.stringify(
       body.data.ingredients.map((ing) => ({
+        user_id: userId,
         recipe_id: recipe.id,
         product_id: ing.productId,
         quantity_kg: ing.quantityKg,
@@ -2285,7 +2341,7 @@ supabaseRestRouter.post("/feeding/recipes", async (req, res) => {
     ),
   });
 
-  const all = await loadRecipesFromSupabase();
+  const all = await loadRecipesFromSupabase(userId);
   const created = all.find((r) => r.id === recipe.id);
   res.status(201).json(CreateFeedRecipeResponse.parse(created));
 });
@@ -2297,6 +2353,7 @@ supabaseRestRouter.patch("/feeding/recipes/:recipeId", async (req, res) => {
     res.status(400).json({ error: "Dados inválidos." });
     return;
   }
+  const userId = getReqUserId(req);
   const uniqueIds = new Set(body.data.ingredients.map((i) => i.productId));
   if (uniqueIds.size !== body.data.ingredients.length) {
     res.status(400).json({
@@ -2304,7 +2361,7 @@ supabaseRestRouter.patch("/feeding/recipes/:recipeId", async (req, res) => {
     });
     return;
   }
-  const products = await sbFetch<SbProductRow[]>("farm_products?select=*");
+  const products = await sbFetch<SbProductRow[]>(`farm_products?user_id=eq.${userId}&select=*`);
   const valid = body.data.ingredients.every((ing) => {
     const p = products.find((x) => x.id === ing.productId);
     return p && p.category === "feed" && p.unit.toLowerCase() === "kg";
@@ -2317,7 +2374,7 @@ supabaseRestRouter.patch("/feeding/recipes/:recipeId", async (req, res) => {
   }
 
   const updated = await sbFetch<SbRecipeRow[]>(
-    `farm_feed_recipes?id=eq.${params.data.recipeId}`,
+    `farm_feed_recipes?id=eq.${params.data.recipeId}&user_id=eq.${userId}`,
     {
       method: "PATCH",
       body: JSON.stringify({ name: body.data.name.trim() }),
@@ -2329,13 +2386,14 @@ supabaseRestRouter.patch("/feeding/recipes/:recipeId", async (req, res) => {
   }
 
   await sbFetch(
-    `farm_feed_recipe_ingredients?recipe_id=eq.${params.data.recipeId}`,
+    `farm_feed_recipe_ingredients?recipe_id=eq.${params.data.recipeId}&user_id=eq.${userId}`,
     { method: "DELETE" },
   );
   await sbFetch("farm_feed_recipe_ingredients", {
     method: "POST",
     body: JSON.stringify(
       body.data.ingredients.map((ing) => ({
+        user_id: userId,
         recipe_id: params.data.recipeId,
         product_id: ing.productId,
         quantity_kg: ing.quantityKg,
@@ -2343,7 +2401,7 @@ supabaseRestRouter.patch("/feeding/recipes/:recipeId", async (req, res) => {
     ),
   });
 
-  const all = await loadRecipesFromSupabase();
+  const all = await loadRecipesFromSupabase(userId);
   const result = all.find((r) => r.id === params.data.recipeId);
   res.json(UpdateFeedRecipeResponse.parse(result));
 });
@@ -2354,8 +2412,9 @@ supabaseRestRouter.delete("/feeding/recipes/:recipeId", async (req, res) => {
     res.status(400).json({ error: params.error.message });
     return;
   }
+  const userId = getReqUserId(req);
   const used = await sbFetch<{ id: number }[]>(
-    `farm_feeding_logs?recipe_id=eq.${params.data.recipeId}&select=id&limit=1`,
+    `farm_feeding_logs?recipe_id=eq.${params.data.recipeId}&user_id=eq.${userId}&select=id&limit=1`,
   );
   if (used.length > 0) {
     res.status(409).json({
@@ -2365,7 +2424,7 @@ supabaseRestRouter.delete("/feeding/recipes/:recipeId", async (req, res) => {
     return;
   }
   const deleted = await sbFetch<SbRecipeRow[]>(
-    `farm_feed_recipes?id=eq.${params.data.recipeId}`,
+    `farm_feed_recipes?id=eq.${params.data.recipeId}&user_id=eq.${userId}`,
     { method: "DELETE" },
   );
   if (!deleted || deleted.length === 0) {
@@ -2375,9 +2434,10 @@ supabaseRestRouter.delete("/feeding/recipes/:recipeId", async (req, res) => {
   res.status(204).json(DeleteFeedRecipeResponse.parse(undefined));
 });
 
-supabaseRestRouter.get("/feeding/logs", async (_req, res) => {
+supabaseRestRouter.get("/feeding/logs", async (req, res) => {
+  const userId = getReqUserId(req);
   const logs = await sbFetch<SbFeedingLogRow[]>(
-    "farm_feeding_logs?select=*&order=feeding_date.desc,id.desc",
+    `farm_feeding_logs?user_id=eq.${userId}&select=*&order=feeding_date.desc,id.desc`,
   );
   res.json(GetFeedLogsResponse.parse(logs.map(presentFeedLog)));
 });
@@ -2388,18 +2448,19 @@ supabaseRestRouter.post("/feeding/logs", async (req, res) => {
     res.status(400).json({ error: body.error.message });
     return;
   }
+  const userId = getReqUserId(req);
 
   const [lots, recipes, ingredients, products] = await Promise.all([
     sbFetch<SbPoultryLotRow[]>(
-      `farm_poultry_lots?id=eq.${body.data.lotId}&select=*&limit=1`,
+      `farm_poultry_lots?id=eq.${body.data.lotId}&user_id=eq.${userId}&select=*&limit=1`,
     ),
     sbFetch<SbRecipeRow[]>(
-      `farm_feed_recipes?id=eq.${body.data.recipeId}&select=*&limit=1`,
+      `farm_feed_recipes?id=eq.${body.data.recipeId}&user_id=eq.${userId}&select=*&limit=1`,
     ),
     sbFetch<SbRecipeIngredientRow[]>(
-      `farm_feed_recipe_ingredients?recipe_id=eq.${body.data.recipeId}&select=*`,
+      `farm_feed_recipe_ingredients?recipe_id=eq.${body.data.recipeId}&user_id=eq.${userId}&select=*`,
     ),
-    sbFetch<SbProductRow[]>("farm_products?select=*"),
+    sbFetch<SbProductRow[]>(`farm_products?user_id=eq.${userId}&select=*`),
   ]);
 
   const lot = lots[0];
@@ -2461,6 +2522,7 @@ supabaseRestRouter.post("/feeding/logs", async (req, res) => {
   const [log] = await sbFetch<SbFeedingLogRow[]>("farm_feeding_logs", {
     method: "POST",
     body: JSON.stringify({
+      user_id: userId,
       lot_id: lot.id,
       recipe_id: recipe.id,
       lot_label_snapshot: lot.label,
@@ -2473,13 +2535,14 @@ supabaseRestRouter.post("/feeding/logs", async (req, res) => {
 
   for (const { product, quantityUsed } of allocations) {
     const nextQty = roundKg(Number(product.quantity) - quantityUsed);
-    await sbFetch(`farm_products?id=eq.${product.id}`, {
+    await sbFetch(`farm_products?id=eq.${product.id}&user_id=eq.${userId}`, {
       method: "PATCH",
       body: JSON.stringify({ quantity: nextQty }),
     });
     await sbFetch("farm_stock_movements", {
       method: "POST",
       body: JSON.stringify({
+        user_id: userId,
         product_id: product.id,
         direction: "out",
         quantity: quantityUsed,
@@ -2499,8 +2562,9 @@ supabaseRestRouter.delete("/feeding/logs/:logId", async (req, res) => {
     res.status(400).json({ error: params.error.message });
     return;
   }
+  const userId = getReqUserId(req);
   const logs = await sbFetch<SbFeedingLogRow[]>(
-    `farm_feeding_logs?id=eq.${params.data.logId}&select=*&limit=1`,
+    `farm_feeding_logs?id=eq.${params.data.logId}&user_id=eq.${userId}&select=*&limit=1`,
   );
   const log = logs[0];
   if (!log) {
@@ -2509,14 +2573,14 @@ supabaseRestRouter.delete("/feeding/logs/:logId", async (req, res) => {
   }
 
   const moves = await sbFetch<SbMovementRow[]>(
-    `farm_stock_movements?source_type=eq.feeding&source_id=eq.${log.id}&select=*`,
+    `farm_stock_movements?source_type=eq.feeding&source_id=eq.${log.id}&user_id=eq.${userId}&select=*`,
   );
   for (const move of moves) {
     const prods = await sbFetch<SbProductRow[]>(
-      `farm_products?id=eq.${move.product_id}&select=*&limit=1`,
+      `farm_products?id=eq.${move.product_id}&user_id=eq.${userId}&select=*&limit=1`,
     );
     if (prods[0]) {
-      await sbFetch(`farm_products?id=eq.${prods[0].id}`, {
+      await sbFetch(`farm_products?id=eq.${prods[0].id}&user_id=eq.${userId}`, {
         method: "PATCH",
         body: JSON.stringify({
           quantity: roundKg(
@@ -2527,10 +2591,10 @@ supabaseRestRouter.delete("/feeding/logs/:logId", async (req, res) => {
     }
   }
   await sbFetch(
-    `farm_stock_movements?source_type=eq.feeding&source_id=eq.${log.id}`,
+    `farm_stock_movements?source_type=eq.feeding&source_id=eq.${log.id}&user_id=eq.${userId}`,
     { method: "DELETE" },
   );
-  await sbFetch(`farm_feeding_logs?id=eq.${log.id}`, { method: "DELETE" });
+  await sbFetch(`farm_feeding_logs?id=eq.${log.id}&user_id=eq.${userId}`, { method: "DELETE" });
 
   res.status(204).json(DeleteFeedLogResponse.parse(undefined));
 });
