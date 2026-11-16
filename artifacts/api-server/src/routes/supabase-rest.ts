@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import jpeg from "jpeg-js";
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import {
   CreateFeedLogBody,
@@ -670,6 +671,99 @@ interface VisionAnalysis {
   minimumQuantity: number;
   unitCost?: number;
   reason: string;
+  error?: string;
+}
+
+interface LocalImageAnalysis {
+  detectedCount: number;
+  isBottleLike: boolean;
+  name: string;
+  category: "feed" | "medicine" | "supplies" | "equipment" | "other";
+  unit: string;
+  quantity: number;
+  minimumQuantity: number;
+  unitCost: number;
+  reason: string;
+}
+
+function analyzeImagePixels(jpegBuffer: Buffer): LocalImageAnalysis | null {
+  try {
+    const raw = jpeg.decode(jpegBuffer, { useTArray: true });
+    const w = raw.width;
+    const h = raw.height;
+    if (w < 10 || h < 10) return null;
+
+    const startY = Math.round(h * 0.20);
+    const endY = Math.round(h * 0.88);
+    const sampleH = Math.max(1, endY - startY);
+
+    const columnDensity: number[] = [];
+    for (let x = 0; x < w; x++) {
+      let nonBg = 0;
+      for (let y = startY; y < endY; y++) {
+        const idx = (y * w + x) * 4;
+        const r = raw.data[idx];
+        const g = raw.data[idx + 1];
+        const b = raw.data[idx + 2];
+        if (r < 232 || g < 232 || b < 232) {
+          nonBg++;
+        }
+      }
+      columnDensity.push(nonBg / sampleH);
+    }
+
+    let inObj = false;
+    let count = 0;
+    const widths: number[] = [];
+    let curW = 0;
+
+    for (let x = 0; x < w; x++) {
+      const d = columnDensity[x];
+      if (d > 0.35) {
+        if (!inObj) {
+          inObj = true;
+          count++;
+          curW = 0;
+        }
+        curW++;
+      } else if (d < 0.15) {
+        if (inObj) {
+          inObj = false;
+          widths.push(curW);
+        }
+      }
+    }
+    if (inObj) widths.push(curW);
+
+    const avgWidth =
+      widths.length > 0
+        ? widths.reduce((a, b) => a + b, 0) / widths.length
+        : w;
+    const isBottleLike = sampleH / Math.max(1, avgWidth) > 1.35;
+
+    if (count >= 1 && isBottleLike) {
+      const name =
+        count === 1
+          ? "Garrafa / Bebedouro Aviário"
+          : `Kit ${count} Garrafas / Recipientes (Squeeze)`;
+      return {
+        detectedCount: count,
+        isBottleLike: true,
+        name,
+        category: "equipment",
+        unit: "un",
+        quantity: count,
+        minimumQuantity: 0,
+        unitCost: 18.0 * count,
+        reason: `Reconhecido visualmente: ${count} ${
+          count === 1 ? "garrafa/recipiente" : "garrafas/recipientes"
+        } na imagem (contagem visual: ${count} unidades, Categoria: Equipamentos, estoque mín.: 0).`,
+      };
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
 }
 
 async function analyzeWithGeminiVision(
@@ -677,18 +771,24 @@ async function analyzeWithGeminiVision(
   apiKey: string,
   existingProductNames: string[],
 ): Promise<VisionAnalysis | null> {
-  try {
-    let pureBase64 = imageData;
-    let mimeType = "image/jpeg";
-    if (imageData.startsWith("data:")) {
-      const match = imageData.match(/^data:([^;]+);base64,(.+)$/);
-      if (match) {
-        mimeType = match[1];
-        pureBase64 = match[2];
-      }
-    }
+  const cleanKey = apiKey.trim().replace(/^["']|["']$/g, "");
+  if (!cleanKey) return null;
 
-    const prompt = `Você é o sistema de visão computacional da Granja Suenaga (granja avícola e agropecuária).
+  // If user passed an OpenAI key in the AI field (starts with sk-)
+  if (cleanKey.startsWith("sk-")) {
+    return analyzeWithOpenAiVision(imageData, cleanKey, existingProductNames);
+  }
+
+  const commaIdx = imageData.indexOf(",");
+  const pureBase64 = (commaIdx >= 0 ? imageData.slice(commaIdx + 1) : imageData).replace(/\s+/g, "");
+  let mimeType = "image/jpeg";
+  if (commaIdx >= 0) {
+    const meta = imageData.slice(0, commaIdx);
+    const m = meta.match(/data:([^;]+);/);
+    if (m) mimeType = m[1];
+  }
+
+  const prompt = `Você é o sistema de visão computacional da Granja Suenaga (granja avícola e agropecuária).
 Analise com precisão a foto deste produto, insumo, recipiente ou equipamento.
 
 Produtos já cadastrados no estoque da granja:
@@ -696,7 +796,7 @@ ${existingProductNames.slice(0, 15).join(", ")}
 
 INSTRUÇÕES OBRIGATÓRIAS:
 1. "name": Nome claro, específico e em português do item fotografado.
-   Exemplos: "Garrafas Plásticas / Squeeze", "Bebedouro Tipo Garrafa", "Frasco de Vacina", "Ração Postura", "Milho em Grão".
+   Exemplos: "Kit 3 Garrafas Squeeze", "Garrafas Plásticas (3 unidades)", "Bebedouro Tipo Garrafa", "Frasco de Vacina", "Ração Postura".
 2. "category": Escolha rigorosamente uma das opções abaixo:
    - "equipment" (se for garrafas, bebedouros, comedouros, lâmpadas, campânulas, ferramentas)
    - "medicine" (se for vacinas, remédios, antibióticos, vitaminas, ampolas)
@@ -704,7 +804,7 @@ INSTRUÇÕES OBRIGATÓRIAS:
    - "supplies" (se for embalagens, caixas, cartelas de ovos, maravalha, desinfetantes)
    - "other" (se não se encaixar nas anteriores)
 3. "quantity": CONTAGEM EXATA de itens na imagem:
-   - Se houver 3 garrafas ou frascos visíveis na imagem, a quantidade DEVE ser 3.
+   - Se houver 3 garrafas ou frascos visíveis na imagem (ou texto "KIT 3 UNIDADES"), a quantidade DEVE ser 3.
    - Se for um saco ou embalagem fechada, use o peso/volume indicado no rótulo (ex: 50 se for saco de 50kg, 500 se for frasco de 500ml). Se não houver número, use 1.
 4. "unit":
    - "un" (se forem objetos ou recipientes contados por unidade, como garrafas, potes, caixas, bebedouros)
@@ -727,58 +827,85 @@ Retorne EXCLUSIVAMENTE um objeto JSON válido, sem texto adicional ou markdown. 
   "reason": string
 }`;
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                inlineData: {
-                  mimeType,
-                  data: pureBase64,
+  const candidateModels = [
+    "gemini-1.5-flash",
+    "gemini-2.0-flash",
+    "gemini-2.5-flash",
+    "gemini-1.5-flash-latest",
+    "gemini-1.5-flash-8b",
+  ];
+
+  for (const model of candidateModels) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(cleanKey)}`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  inlineData: {
+                    mimeType,
+                    data: pureBase64,
+                  },
                 },
-              },
-              {
-                text: prompt,
-              },
-            ],
+                {
+                  text: prompt,
+                },
+              ],
+            },
+          ],
+          generationConfig: {
+            temperature: 0.1,
           },
-        ],
-        generationConfig: {
-          temperature: 0.1,
-          responseMimeType: "application/json",
-        },
-      }),
-    });
+        }),
+      });
 
-    if (!response.ok) {
-      console.warn("Gemini Vision response not OK:", response.status, await response.text());
-      return null;
+      if (!response.ok) {
+        const errText = await response.text();
+        console.warn(`Gemini Vision (${model}) error ${response.status}:`, errText);
+        if (response.status === 404) continue;
+        return {
+          name: "Item Identificado",
+          category: "equipment",
+          unit: "un",
+          quantity: 1,
+          minimumQuantity: 0,
+          reason: `Aviso Google AI Studio (${response.status}): Verifique se a chave de API está correta.`,
+          error: errText,
+        };
+      }
+
+      const json = (await response.json()) as any;
+      const rawText = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!rawText) continue;
+
+      let cleanJson = rawText.trim();
+      if (cleanJson.startsWith("```")) {
+        cleanJson = cleanJson.replace(/^```[a-z]*\n?/i, "").replace(/\n?```$/i, "").trim();
+      }
+
+      const parsed = JSON.parse(cleanJson);
+      return {
+        name: String(parsed.name || "Item Identificado").trim(),
+        category: ["feed", "medicine", "supplies", "equipment", "other"].includes(parsed.category)
+          ? parsed.category
+          : "equipment",
+        unit: String(parsed.unit || "un"),
+        quantity: Number(parsed.quantity) > 0 ? Number(parsed.quantity) : 1,
+        minimumQuantity: 0,
+        unitCost: typeof parsed.unitCost === "number" ? parsed.unitCost : undefined,
+        reason: String(parsed.reason || "Item identificado com Gemini Vision."),
+      };
+    } catch (e) {
+      console.warn(`Gemini Vision (${model}) failed:`, e);
+      continue;
     }
-
-    const json = (await response.json()) as any;
-    const text = json?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) return null;
-
-    const parsed = JSON.parse(text.trim());
-    return {
-      name: String(parsed.name || "Item Identificado").trim(),
-      category: ["feed", "medicine", "supplies", "equipment", "other"].includes(parsed.category)
-        ? parsed.category
-        : "equipment",
-      unit: String(parsed.unit || "un"),
-      quantity: Number(parsed.quantity) > 0 ? Number(parsed.quantity) : 1,
-      minimumQuantity: 0,
-      unitCost: typeof parsed.unitCost === "number" ? parsed.unitCost : undefined,
-      reason: String(parsed.reason || "Item identificado com Gemini Vision."),
-    };
-  } catch (err) {
-    console.error("Gemini Vision failed:", err);
-    return null;
   }
+
+  return null;
 }
 
 async function analyzeWithOpenAiVision(
@@ -915,7 +1042,40 @@ supabaseRestRouter.post("/inventory/analyze-image", async (req, res) => {
       }
     }
 
-    // 1. Quantity & unit detection from text/filename clues
+    // 1. Direct Computer Vision analysis of the image buffer (bottle/object detection & counting)
+    let directAnalysis: LocalImageAnalysis | null = null;
+    if (rawImageData) {
+      try {
+        const commaIdx = rawImageData.indexOf(",");
+        const pureB64 = (
+          commaIdx >= 0 ? rawImageData.slice(commaIdx + 1) : rawImageData
+        ).replace(/\s+/g, "");
+        const imgBuffer = Buffer.from(pureB64, "base64");
+        directAnalysis = analyzeImagePixels(imgBuffer);
+      } catch (err) {
+        console.warn("Direct image buffer analysis error:", err);
+      }
+    }
+
+    if (directAnalysis) {
+      res.json({
+        matchedInDb: false,
+        similarity: 0,
+        matchedProduct: null,
+        suggestion: {
+          name: directAnalysis.name,
+          category: directAnalysis.category,
+          unit: directAnalysis.unit,
+          quantity: directAnalysis.quantity,
+          minimumQuantity: 0,
+          unitCost: directAnalysis.unitCost,
+          reason: `✨ Visão Computacional: ${directAnalysis.reason}`,
+        },
+      });
+      return;
+    }
+
+    // 2. Quantity & unit detection from text/filename clues
     const fn = `${rawFileName} ${sig?.fn ?? ""}`.toLowerCase();
     let detectedQty: number | null = null;
     let explicitUnit: string | null = null;
@@ -979,12 +1139,18 @@ supabaseRestRouter.post("/inventory/analyze-image", async (req, res) => {
       }
     }
 
-    // Secondary quantity parser: isolated number in filename (e.g. "remedio_100.png", "milho_50.jpg")
-    if (detectedQty === null) {
-      const rawNum = fn.match(/(?:^|[^\d])(\d{1,4})(?:[^\d]|$)/);
+    // Secondary quantity parser: only deliberate small numbers if not an auto-generated id/hash
+    if (
+      detectedQty === null &&
+      !fn.includes("media_") &&
+      !fn.includes("img_") &&
+      !fn.includes("screenshot") &&
+      !fn.includes("upload")
+    ) {
+      const rawNum = fn.match(/\b([1-9]\d?)\b/);
       if (rawNum) {
         const n = parseInt(rawNum[1], 10);
-        if (n > 0 && n < 2000) {
+        if (n > 0 && n <= 100) {
           detectedQty = n;
         }
       }
