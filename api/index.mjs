@@ -53796,6 +53796,9 @@ authRouter.get("/auth/me", (req, res) => {
     res.status(401).json({ authenticated: false, user: null });
     return;
   }
+  if (user.username === "suenaga" && user.displayName === "Granja Suenaga") {
+    user.displayName = "Granja Gabriel Suenaga";
+  }
   res.json({ authenticated: true, user });
 });
 authRouter.post("/auth/logout", (_req, res) => {

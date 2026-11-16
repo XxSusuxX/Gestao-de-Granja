@@ -165,7 +165,9 @@ body,
 .topbar-brand {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
+  min-width: 0;
+  flex: 1;
 }
 
 .topbar-logo {
@@ -179,9 +181,95 @@ body,
   flex: none;
 }
 
-.topbar-brand strong {
-  font: 700 clamp(22px, 2.8vw, 32px)/1 var(--app-font-serif);
+.topbar-brand strong,
+.topbar-client-name {
+  font: 700 clamp(24px, 3.2vw, 36px)/1.1 var(--app-font-serif);
+  color: #fdf9ee;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.swipe-toast-popup {
+  position: fixed;
+  bottom: clamp(88px, 12vh, 112px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 65;
+  width: min(92vw, 680px);
+  background: #1d392b;
+  color: #fdf9ee;
+  border: 3px solid #dfb968;
+  border-radius: 24px;
+  padding: 16px 22px;
+  box-shadow: 0 20px 50px rgba(15, 32, 23, 0.42);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  animation: toastSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes toastSlideUp {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 24px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.swipe-toast-icon {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: #2b4f3d;
+  color: #dfb968;
+  padding: 10px 12px;
+  border-radius: 16px;
+  flex: none;
+  animation: swayHand 1.6s ease-in-out infinite;
+}
+
+@keyframes swayHand {
+  0%, 100% { transform: translateX(-4px); }
+  50% { transform: translateX(4px); }
+}
+
+.swipe-toast-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.swipe-toast-copy b {
+  display: block;
+  font-size: clamp(20px, 2.4vw, 25px);
+  font-weight: 800;
+  color: #f6e3b4;
+}
+
+.swipe-toast-copy span {
+  display: block;
+  font-size: clamp(16px, 1.9vw, 20px);
+  color: #e2ede4;
+  margin-top: 2px;
+}
+
+.swipe-toast-close {
+  min-height: 48px;
+  padding: 0 20px;
+  border-radius: 14px;
+  border: 0;
+  background: #dfb968;
+  color: #183024;
+  font: 800 clamp(17px, 2vw, 21px) var(--app-font-sans);
+  cursor: pointer;
+  flex: none;
+}
+
+.swipe-toast-close:hover {
+  background: #eccb7f;
 }
 
 .swipe-hint-pill {

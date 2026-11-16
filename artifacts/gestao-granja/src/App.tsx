@@ -351,12 +351,12 @@ function LoginScreen({ onAuthenticated }: { onAuthenticated: (user: AuthUser, to
 
           {mode === 'register' && (
             <label className="field-label">
-              Nome da Granja / Pessoa
+              Nome e Sobrenome (ex.: Gabriel Suenaga)
               <input
                 required
                 value={displayName}
                 onChange={e => setDisplayName(e.target.value)}
-                placeholder="Ex.: Granja Suenaga"
+                placeholder="Ex.: Gabriel Suenaga"
                 data-testid="input-register-displayname"
               />
             </label>
@@ -1285,6 +1285,31 @@ function SwipeWorkspace({ user, onLogout }: { user: AuthUser; onLogout: () => vo
   const isProgrammaticScroll = useRef(false);
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
+  const [showSwipePopup, setShowSwipePopup] = useState<boolean>(() => {
+    return sessionStorage.getItem('granja_swipe_popup_seen') !== '1';
+  });
+
+  const dismissSwipePopup = () => {
+    sessionStorage.setItem('granja_swipe_popup_seen', '1');
+    setShowSwipePopup(false);
+  };
+
+  useEffect(() => {
+    if (!showSwipePopup) return undefined;
+    const timer = window.setTimeout(() => {
+      sessionStorage.setItem('granja_swipe_popup_seen', '1');
+      setShowSwipePopup(false);
+    }, 6000);
+    return () => window.clearTimeout(timer);
+  }, [showSwipePopup]);
+
+  const rawName = (user.displayName || user.username || 'Gabriel Suenaga').trim();
+  const normalizedTitle =
+    rawName.toLowerCase() === 'granja suenaga'
+      ? 'Granja Gabriel Suenaga'
+      : rawName.toLowerCase().startsWith('granja')
+        ? rawName
+        : `Granja ${rawName}`;
 
   const slideIndexFromLocation = useMemo(() => {
     const idx = SLIDES.findIndex(s => s.path === location);
@@ -1296,6 +1321,7 @@ function SwipeWorkspace({ user, onLogout }: { user: AuthUser; onLogout: () => vo
   const goToSlide = (targetIndex: number) => {
     const clamped = Math.max(0, Math.min(SLIDES.length - 1, targetIndex));
     setActiveIndex(clamped);
+    if (showSwipePopup) dismissSwipePopup();
     const targetPath = SLIDES[clamped].path;
     if (location !== targetPath) {
       setLocation(targetPath);
@@ -1337,6 +1363,7 @@ function SwipeWorkspace({ user, onLogout }: { user: AuthUser; onLogout: () => vo
     const idx = Math.round(deck.scrollLeft / deck.clientWidth);
     if (idx !== activeIndex && idx >= 0 && idx < SLIDES.length) {
       setActiveIndex(idx);
+      if (showSwipePopup) dismissSwipePopup();
       const targetPath = SLIDES[idx].path;
       if (location !== targetPath) {
         setLocation(targetPath);
@@ -1371,37 +1398,12 @@ function SwipeWorkspace({ user, onLogout }: { user: AuthUser; onLogout: () => vo
       <header className="giant-topbar">
         <div className="topbar-brand">
           <span className="topbar-logo"><Egg size={30} /></span>
-          <strong>Granja Suenaga</strong>
-        </div>
-
-        <div className="swipe-hint-pill">
-          <button
-            type="button"
-            className="swipe-arrow-btn"
-            disabled={activeIndex <= 0}
-            onClick={() => goToSlide(activeIndex - 1)}
-            aria-label="Tela anterior"
-            data-testid="button-prev-screen"
-          >
-            <ChevronLeft size={28} />
-          </button>
-          <span className="swipe-hint-text">
-            <Hand size={22} /> Deslize pro lado ({activeIndex + 1}/{SLIDES.length})
-          </span>
-          <button
-            type="button"
-            className="swipe-arrow-btn"
-            disabled={activeIndex >= SLIDES.length - 1}
-            onClick={() => goToSlide(activeIndex + 1)}
-            aria-label="Próxima tela"
-            data-testid="button-next-screen"
-          >
-            <ChevronRight size={28} />
-          </button>
+          <strong className="topbar-client-name" data-testid="text-header-client-name">
+            {normalizedTitle}
+          </strong>
         </div>
 
         <div className="topbar-user">
-          <span className="user-badge"><Database size={18} /> {user.displayName}</span>
           <button
             type="button"
             className="logout-btn"
@@ -1413,6 +1415,28 @@ function SwipeWorkspace({ user, onLogout }: { user: AuthUser; onLogout: () => vo
           </button>
         </div>
       </header>
+
+      {showSwipePopup && (
+        <div className="swipe-toast-popup" role="status" data-testid="popup-swipe-hint">
+          <div className="swipe-toast-icon">
+            <ChevronLeft size={26} />
+            <Hand size={28} />
+            <ChevronRight size={26} />
+          </div>
+          <div className="swipe-toast-copy">
+            <b>Deslize para os lados</b>
+            <span>Arraste o dedo para a esquerda ou direita para mudar de tela</span>
+          </div>
+          <button
+            type="button"
+            className="swipe-toast-close"
+            onClick={dismissSwipePopup}
+            data-testid="button-dismiss-swipe-popup"
+          >
+            Entendi
+          </button>
+        </div>
+      )}
 
       <main
         ref={deckRef}
@@ -1488,6 +1512,7 @@ function AuthenticatedApp() {
         if (!res.ok) throw new Error('Unauthorized');
         const data = (await res.json()) as { authenticated: boolean; user: AuthUser };
         if (data.authenticated && data.user) {
+          localStorage.setItem(AUTH_USER_KEY, JSON.stringify(data.user));
           setUser(data.user);
         } else {
           localStorage.removeItem(AUTH_STORAGE_KEY);
