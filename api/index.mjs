@@ -56317,7 +56317,7 @@ supabaseRestRouter.post("/inventory/analyze-image", async (req, res) => {
             unit: visionResult.unit,
             quantity: visionResult.quantity,
             minimumQuantity: 0,
-            unitCost: visionResult.unitCost ?? (matchInDb?.unit_cost ? Number(matchInDb.unit_cost) : 12),
+            unitCost: visionResult.unitCost ?? (matchInDb?.unit_cost_cents ? matchInDb.unit_cost_cents / 100 : 12),
             reason: `\u2728 Vis\xE3o Computacional por IA: ${visionResult.reason}`
           }
         });
