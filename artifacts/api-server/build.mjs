@@ -44,24 +44,13 @@ async function buildAll() {
     banner: { js: bannerJs },
   });
 
-  // 2. Vercel Serverless Function bundle (api/index.mjs and api/index.js)
+  // 2. Vercel Serverless Function bundle (api/index.mjs)
   await esbuild({
     entryPoints: [path.resolve(artifactDir, "src/app.ts")],
     platform: "node",
     bundle: true,
     format: "esm",
     outfile: path.resolve(vercelApiDir, "index.mjs"),
-    logLevel: "info",
-    external: externalPackages,
-    banner: { js: bannerJs },
-  });
-
-  await esbuild({
-    entryPoints: [path.resolve(artifactDir, "src/app.ts")],
-    platform: "node",
-    bundle: true,
-    format: "esm",
-    outfile: path.resolve(vercelApiDir, "index.js"),
     logLevel: "info",
     external: externalPackages,
     banner: { js: bannerJs },
