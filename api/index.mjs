@@ -53896,6 +53896,159 @@ supabaseRestRouter.post("/inventory/analyze-image", async (req, res) => {
     const products = await sbFetch(
       "farm_products?select=*&order=id.desc"
     );
+    const fn = `${rawFileName} ${sig?.fn ?? ""}`.toLowerCase();
+    let detectedQty = null;
+    let explicitUnit = null;
+    let detectedState = null;
+    let detectedSize = null;
+    const qtyUnitRegex = /(\d+(?:[.,]\d+)?)\s*(ml|mililitros?|l|litros?|litro|kg|kilos?|quilos?|g|gramas?|sacos?|un|und|unidades?|doses?)\b/i;
+    const match = fn.match(qtyUnitRegex);
+    if (match) {
+      const val = parseFloat(match[1].replace(",", "."));
+      const u = match[2].toLowerCase();
+      if (!isNaN(val) && val > 0) {
+        if (u.startsWith("ml") || u.startsWith("mili")) {
+          detectedQty = val;
+          explicitUnit = "ml";
+          detectedState = "liquid";
+          detectedSize = "small";
+        } else if (u === "l" || u.startsWith("litro")) {
+          detectedState = "liquid";
+          if (val <= 0.5) {
+            detectedQty = Math.round(val * 1e3);
+            explicitUnit = "ml";
+            detectedSize = "small";
+          } else {
+            detectedQty = val;
+            explicitUnit = "L";
+            detectedSize = val >= 5 ? "large" : "small";
+          }
+        } else if (u.startsWith("g") && !u.startsWith("gra")) {
+          detectedQty = val;
+          explicitUnit = "g";
+          detectedState = "solid";
+          detectedSize = "small";
+        } else if (u.startsWith("kg") || u.startsWith("kilo") || u.startsWith("quilo")) {
+          detectedState = "solid";
+          if (val < 1) {
+            detectedQty = Math.round(val * 1e3);
+            explicitUnit = "g";
+            detectedSize = "small";
+          } else {
+            detectedQty = val;
+            explicitUnit = "kg";
+            detectedSize = val >= 10 ? "large" : "small";
+          }
+        } else if (u.startsWith("un") || u.startsWith("dose")) {
+          detectedQty = val;
+          explicitUnit = "un";
+          detectedState = "discrete";
+        } else if (u.startsWith("saco")) {
+          detectedQty = val;
+          explicitUnit = "saco";
+          detectedState = "solid";
+          detectedSize = "large";
+        }
+      }
+    }
+    if (detectedQty === null) {
+      const rawNum = fn.match(/(?:^|[^\d])(\d{1,4})(?:[^\d]|$)/);
+      if (rawNum) {
+        const n = parseInt(rawNum[1], 10);
+        if (n > 0 && n < 2e3) {
+          detectedQty = n;
+        }
+      }
+    }
+    const liquidKeywords = [
+      "liquido",
+      "l\xEDquido",
+      "frasco",
+      "gotas",
+      "solucao",
+      "solu\xE7\xE3o",
+      "suspensao",
+      "suspens\xE3o",
+      "xarope",
+      "oleo",
+      "\xF3leo",
+      "injetavel",
+      "injet\xE1vel",
+      "soro",
+      "desinfetante",
+      "detergente",
+      "cloro",
+      "agua",
+      "\xE1gua",
+      "spray",
+      "ampola",
+      "ml",
+      "litro",
+      "litros"
+    ];
+    const solidKeywords = [
+      "solido",
+      "s\xF3lido",
+      "po",
+      "p\xF3",
+      "grao",
+      "gr\xE3o",
+      "farelo",
+      "calcario",
+      "calc\xE1rio",
+      "racao",
+      "ra\xE7\xE3o",
+      "saco",
+      "feno",
+      "maravalha",
+      "semente",
+      "farinha",
+      "comprimido",
+      "capsula",
+      "c\xE1psula",
+      "kg",
+      "kilo",
+      "quilo",
+      "grama",
+      "gramas"
+    ];
+    const smallKeywords = [
+      "pequeno",
+      "pequena",
+      "mini",
+      "gotas",
+      "ampola",
+      "frasco",
+      "sache",
+      "sach\xEA",
+      "pote",
+      "dose",
+      "100ml",
+      "250ml",
+      "500ml",
+      "100g",
+      "250g"
+    ];
+    const largeKeywords = [
+      "grande",
+      "saco",
+      "bombona",
+      "balde",
+      "tambor",
+      "fardo",
+      "bigbag",
+      "bag",
+      "galao",
+      "gal\xE3o",
+      "50kg",
+      "25kg",
+      "5l",
+      "20l"
+    ];
+    const hasLiquidWord = liquidKeywords.some((w) => fn.includes(w));
+    const hasSolidWord = solidKeywords.some((w) => fn.includes(w));
+    const hasSmallWord = smallKeywords.some((w) => fn.includes(w));
+    const hasLargeWord = largeKeywords.some((w) => fn.includes(w));
     let bestMatch = null;
     let bestSimilarity = 0;
     if (sig && sig.v && sig.v.length > 0) {
@@ -53912,6 +54065,8 @@ supabaseRestRouter.post("/inventory/analyze-image", async (req, res) => {
     }
     if (bestMatch && bestSimilarity >= 0.87) {
       const presented = presentProduct2(bestMatch);
+      const finalUnit = explicitUnit || presented.unit;
+      const finalQty = detectedQty ?? presented.quantity ?? 25;
       res.json({
         matchedInDb: true,
         similarity: Math.round(bestSimilarity * 100),
@@ -53919,131 +54074,193 @@ supabaseRestRouter.post("/inventory/analyze-image", async (req, res) => {
         suggestion: {
           name: presented.name,
           category: presented.category,
-          unit: presented.unit,
-          quantity: 25,
-          minimumQuantity: presented.minimumQuantity ?? 20,
+          unit: finalUnit,
+          quantity: finalQty,
+          minimumQuantity: 0,
+          // Estoque mínimo inicia sempre como 0 conforme solicitado
           unitCost: presented.unitCost,
-          reason: `Imagem reconhecida no banco (${Math.round(bestSimilarity * 100)}% de semelhan\xE7a com \u201C${presented.name}\u201D).`
+          reason: `Imagem reconhecida no banco (${Math.round(bestSimilarity * 100)}% de semelhan\xE7a com \u201C${presented.name}\u201D). Quantidade: ${finalQty} ${finalUnit}, estoque m\xEDnimo iniciado em 0.`
         }
       });
       return;
     }
     const [r, g, b] = sig?.rgb ?? [160, 150, 110];
     const std = sig?.std ?? 40;
-    const fn = `${rawFileName} ${sig?.fn ?? ""}`.toLowerCase();
     let detectedCategory = "feed";
     let keywordHint = "";
     let fallbackName = "Ra\xE7\xE3o Postura";
-    let fallbackUnit = "kg";
-    let fallbackMin = 50;
     let fallbackCost = 2.4;
-    if (fn.includes("vacina") || fn.includes("remedio") || fn.includes("rem\xE9dio") || fn.includes("medicamento") || fn.includes("antibiotico") || fn.includes("vitamina")) {
+    if (fn.includes("calcario") || fn.includes("calc\xE1rio")) {
+      detectedCategory = "feed";
+      keywordHint = "calc\xE1rio";
+      fallbackName = "Calc\xE1rio Calc\xEDtico";
+      fallbackCost = 0.85;
+    } else if (fn.includes("desinfetante") || fn.includes("detergente") || fn.includes("cloro") || fn.includes("sanitizante")) {
+      detectedCategory = "supplies";
+      keywordHint = "desinfetante";
+      fallbackName = "Desinfetante / Sanitizante Avi\xE1rio";
+      fallbackCost = 35;
+    } else if (fn.includes("vacina") || fn.includes("remedio") || fn.includes("rem\xE9dio") || fn.includes("medicamento") || fn.includes("antibiotico") || fn.includes("vitamina") || fn.includes("gotas") || fn.includes("frasco") || fn.includes("ampola")) {
       detectedCategory = "medicine";
       keywordHint = "vacina";
-      fallbackName = "Vacina / Medicamento Av\xEDcola";
-      fallbackUnit = "un";
-      fallbackMin = 2;
+      fallbackName = "Vacina Newcastle + Bronquite";
       fallbackCost = 45;
-    } else if (fn.includes("cartela") || fn.includes("ovo") || fn.includes("embalagem") || fn.includes("maravalha") || fn.includes("insumo") || fn.includes("cal")) {
+    } else if (fn.includes("cartela") || fn.includes("ovo") || fn.includes("embalagem") || fn.includes("maravalha") || fn.includes("insumo")) {
       detectedCategory = "supplies";
       keywordHint = "cartela";
       fallbackName = "Cartelas para 30 Ovos";
-      fallbackUnit = "un";
-      fallbackMin = 50;
       fallbackCost = 0.95;
     } else if (fn.includes("comedouro") || fn.includes("bebedouro") || fn.includes("lampada") || fn.includes("campanula") || fn.includes("equipamento")) {
       detectedCategory = "equipment";
       keywordHint = "comedouro";
-      fallbackName = "Comedouro / Bebedouro Tubular";
-      fallbackUnit = "un";
-      fallbackMin = 2;
+      fallbackName = "Comedouro / Bebedouro Av\xEDcola";
       fallbackCost = 38;
-    } else if (fn.includes("soja")) {
+    } else if (fn.includes("soja") || fn.includes("farelo")) {
       detectedCategory = "feed";
       keywordHint = "soja";
       fallbackName = "Farelo de Soja";
-      fallbackUnit = "kg";
-      fallbackMin = 80;
       fallbackCost = 2.9;
     } else if (fn.includes("nucleo") || fn.includes("n\xFAcleo")) {
       detectedCategory = "feed";
       keywordHint = "n\xFAcleo";
       fallbackName = "N\xFAcleo Postura 4%";
-      fallbackUnit = "kg";
-      fallbackMin = 20;
       fallbackCost = 6.8;
-    } else if (fn.includes("calcario") || fn.includes("calc\xE1rio")) {
-      detectedCategory = "feed";
-      keywordHint = "calc\xE1rio";
-      fallbackName = "Calc\xE1rio Calc\xEDtico";
-      fallbackUnit = "kg";
-      fallbackMin = 20;
-      fallbackCost = 0.85;
     } else if (fn.includes("milho")) {
       detectedCategory = "feed";
       keywordHint = "milho";
       fallbackName = "Milho em Gr\xE3o";
-      fallbackUnit = "kg";
-      fallbackMin = 150;
       fallbackCost = 1.45;
+    } else if (fn.includes("racao") || fn.includes("ra\xE7\xE3o")) {
+      detectedCategory = "feed";
+      keywordHint = "ra\xE7\xE3o";
+      fallbackName = "Ra\xE7\xE3o Postura";
+      fallbackCost = 2.4;
     } else if (b > r + 14 || g > r + 18 && b > 100) {
       detectedCategory = "medicine";
       keywordHint = "vacina";
       fallbackName = "Vacina Newcastle + Bronquite";
-      fallbackUnit = "un";
-      fallbackMin = 2;
       fallbackCost = 45;
     } else if (r > 150 && g > 115 && r - b > 42) {
       detectedCategory = "feed";
       keywordHint = "milho";
       fallbackName = "Milho em Gr\xE3o";
-      fallbackUnit = "kg";
-      fallbackMin = 150;
       fallbackCost = 1.45;
     } else if (r > 110 && g > 80 && b < 115 && r >= g && g >= b) {
       detectedCategory = "feed";
       keywordHint = "soja";
       fallbackName = "Farelo de Soja";
-      fallbackUnit = "kg";
-      fallbackMin = 80;
       fallbackCost = 2.9;
     } else if (r > 185 && g > 185 && b > 175 && Math.abs(r - b) < 25) {
       detectedCategory = "feed";
       keywordHint = "calc\xE1rio";
       fallbackName = "Calc\xE1rio Calc\xEDtico";
-      fallbackUnit = "kg";
-      fallbackMin = 20;
       fallbackCost = 0.85;
     } else if (std < 38) {
       detectedCategory = "supplies";
       keywordHint = "cartela";
       fallbackName = "Cartelas para 30 Ovos";
-      fallbackUnit = "un";
-      fallbackMin = 50;
       fallbackCost = 0.95;
     } else if (std > 68) {
       detectedCategory = "equipment";
       keywordHint = "equipamento";
       fallbackName = "Comedouro / Bebedouro Av\xEDcola";
-      fallbackUnit = "un";
-      fallbackMin = 2;
       fallbackCost = 38;
     }
+    let state = "solid";
+    if (detectedState) {
+      state = detectedState;
+    } else if (hasLiquidWord) {
+      state = "liquid";
+    } else if (hasSolidWord) {
+      state = "solid";
+    } else if (detectedCategory === "medicine") {
+      state = "liquid";
+    } else if (detectedCategory === "equipment") {
+      state = "discrete";
+    } else if (detectedCategory === "supplies" && (fn.includes("desinfetante") || fn.includes("detergente") || fn.includes("cloro") || fn.includes("sanitizante"))) {
+      state = "liquid";
+    } else if (detectedCategory === "supplies") {
+      state = "discrete";
+    } else {
+      state = "solid";
+    }
+    let size = "large";
+    if (detectedSize) {
+      size = detectedSize;
+    } else if (hasSmallWord) {
+      size = "small";
+    } else if (hasLargeWord) {
+      size = "large";
+    } else if (state === "liquid") {
+      if (detectedCategory === "medicine" || fn.includes("frasco") || fn.includes("gotas") || fn.includes("ampola")) {
+        size = "small";
+      } else if (fn.includes("bombona") || fn.includes("balde") || fn.includes("galao") || fn.includes("gal\xE3o") || fn.includes("tambor")) {
+        size = "large";
+      } else {
+        size = "large";
+      }
+    } else if (state === "solid") {
+      if (detectedCategory === "feed") {
+        size = "large";
+      } else if (detectedCategory === "medicine") {
+        size = "small";
+      } else {
+        size = "large";
+      }
+    }
+    let chosenUnit = explicitUnit;
+    let chosenQty = detectedQty;
+    if (!chosenUnit) {
+      if (state === "liquid") {
+        chosenUnit = size === "small" ? "ml" : "L";
+      } else if (state === "solid") {
+        chosenUnit = size === "small" ? "g" : "kg";
+      } else {
+        chosenUnit = "un";
+      }
+    }
+    if (chosenQty === null || chosenQty <= 0) {
+      if (chosenUnit === "ml") {
+        chosenQty = 250;
+      } else if (chosenUnit === "L") {
+        chosenQty = 5;
+      } else if (chosenUnit === "g") {
+        chosenQty = 250;
+      } else if (chosenUnit === "kg") {
+        chosenQty = detectedCategory === "feed" ? 50 : 25;
+      } else {
+        chosenQty = detectedCategory === "supplies" ? 50 : 1;
+      }
+    }
+    const stateDesc = state === "liquid" ? "l\xEDquido" : state === "solid" ? "s\xF3lido" : "unit\xE1rio";
+    const sizeDesc = size === "small" ? "pequeno" : "grande";
     const dbSuggested = (keywordHint ? products.find((p) => p.name.toLowerCase().includes(keywordHint)) : void 0) ?? products.find((p) => p.category === detectedCategory);
     if (dbSuggested) {
       const presented = presentProduct2(dbSuggested);
+      let finalUnit = explicitUnit;
+      if (!finalUnit) {
+        if (state === "liquid") {
+          finalUnit = presented.unit === "ml" || presented.unit === "L" ? presented.unit : chosenUnit;
+        } else if (state === "solid") {
+          finalUnit = presented.unit === "kg" || presented.unit === "g" || presented.unit === "saco" ? presented.unit : chosenUnit;
+        } else {
+          finalUnit = presented.unit || chosenUnit;
+        }
+      }
+      const finalQty = detectedQty ?? (finalUnit === presented.unit ? presented.quantity ?? chosenQty : chosenQty);
       res.json({
         matchedInDb: true,
-        similarity: 84,
+        similarity: 85,
         matchedProduct: presented,
         suggestion: {
           name: presented.name,
           category: presented.category,
-          unit: presented.unit,
-          quantity: 25,
-          minimumQuantity: presented.minimumQuantity ?? fallbackMin,
+          unit: finalUnit,
+          quantity: finalQty,
+          minimumQuantity: 0,
+          // Inicia em 0 conforme solicitado
           unitCost: presented.unitCost ?? fallbackCost,
-          reason: `Item identificado na categoria ${presented.category === "feed" ? "Alimenta\xE7\xE3o" : presented.category === "medicine" ? "Rem\xE9dios" : presented.category === "supplies" ? "Insumos" : presented.category === "equipment" ? "Equipamentos" : "Outros"} \u2014 sugerindo cadastro existente \u201C${presented.name}\u201D do banco.`
+          reason: `Produto ${stateDesc} (${sizeDesc}) identificado na categoria ${presented.category === "feed" ? "Alimenta\xE7\xE3o" : presented.category === "medicine" ? "Rem\xE9dios" : presented.category === "supplies" ? "Insumos" : presented.category === "equipment" ? "Equipamentos" : "Outros"}. Sugerindo \u201C${presented.name}\u201D do banco com unidade '${finalUnit}', quantidade ${finalQty} e estoque m\xEDnimo iniciado em 0.`
         }
       });
       return;
@@ -54055,11 +54272,12 @@ supabaseRestRouter.post("/inventory/analyze-image", async (req, res) => {
       suggestion: {
         name: fallbackName,
         category: detectedCategory,
-        unit: fallbackUnit,
-        quantity: 25,
-        minimumQuantity: fallbackMin,
+        unit: chosenUnit,
+        quantity: chosenQty,
+        minimumQuantity: 0,
+        // Inicia em 0 conforme solicitado
         unitCost: fallbackCost,
-        reason: `Imagem analisada: classificado automaticamente na categoria correspondente.`
+        reason: `Item ${stateDesc} (${sizeDesc}) analisado. Unidade definida como '${chosenUnit}', quantidade sugerida: ${chosenQty} e estoque m\xEDnimo iniciado em 0.`
       }
     });
   } catch (err) {

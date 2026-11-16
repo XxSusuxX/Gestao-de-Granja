@@ -449,7 +449,7 @@ function ProductForm({
     initial?.minimumQuantity?.toString() ??
       (initialAnalysis?.suggestion.minimumQuantity != null
         ? String(initialAnalysis.suggestion.minimumQuantity)
-        : ''),
+        : '0'),
   );
   const [unitCost, setUnitCost] = useState(
     initial?.unitCost?.toString() ??
@@ -479,11 +479,16 @@ function ProductForm({
     { key: 'other', label: 'Outros' },
   ];
 
+  const formQuickQuantities =
+    unit === 'ml' || unit === 'g'
+      ? [50, 100, 250, 500, 1000]
+      : quickQuantities;
+
   const applySuggestion = (item: string) => {
     setName(item);
     if (item.includes('Vacina')) {
       setCategory('medicine');
-      setUnit('un');
+      setUnit('ml');
     } else {
       setCategory('feed');
       setUnit('kg');
@@ -503,12 +508,10 @@ function ProductForm({
       setName(analysis.suggestion.name);
       setCategory(analysis.suggestion.category);
       setUnit(analysis.suggestion.unit);
-      if (!initial && !quantity) {
+      if (!initial && (!quantity || quantity === '0')) {
         setQuantity(String(analysis.suggestion.quantity));
       }
-      if (analysis.suggestion.minimumQuantity != null) {
-        setMinimum(String(analysis.suggestion.minimumQuantity));
-      }
+      setMinimum(String(analysis.suggestion.minimumQuantity ?? 0));
       if (analysis.suggestion.unitCost != null) {
         setUnitCost(String(analysis.suggestion.unitCost));
       }
@@ -532,7 +535,7 @@ function ProductForm({
           category,
           unit,
           quantity: Number(quantity),
-          minimumQuantity: minimum ? Number(minimum) : null,
+          minimumQuantity: minimum ? Number(minimum) : 0,
           unitCost: unitCost ? Number(unitCost) : null,
           imageData,
           imageSignature,
@@ -647,7 +650,7 @@ function ProductForm({
           />
           {!initial && (
             <div className="suggestion-row">
-              {quickQuantities.map(q => (
+              {formQuickQuantities.map(q => (
                 <button
                   type="button"
                   key={q}
@@ -664,8 +667,10 @@ function ProductForm({
           Unidade
           <select value={unit} onChange={e => setUnit(e.target.value)} data-testid="select-product-unit">
             <option value="kg">Quilos (kg)</option>
-            <option value="un">Unidades (un)</option>
+            <option value="g">Gramas (g)</option>
             <option value="L">Litros (L)</option>
+            <option value="ml">Mililitros (ml)</option>
+            <option value="un">Unidades (un)</option>
             <option value="saco">Sacos</option>
           </select>
         </label>
@@ -680,7 +685,7 @@ function ProductForm({
             step="any"
             value={minimum}
             onChange={e => setMinimum(e.target.value)}
-            placeholder="Ex.: 20"
+            placeholder="0"
             data-testid="input-product-minimum"
           />
         </label>
@@ -1092,7 +1097,7 @@ function StockScreen() {
           visibleProducts.length === 0 ? <div className="giant-empty"><p>Nenhum produto nesta categoria.</p><button className="button primary giant-btn" onClick={() => setModal('product')}><Plus size={26} /> Adicionar Produto</button></div> :
           <div className="giant-list">
             {visibleProducts.map(p => {
-              const low = p.minimumQuantity !== null && p.quantity <= p.minimumQuantity;
+              const low = p.minimumQuantity !== null && p.minimumQuantity > 0 && p.quantity <= p.minimumQuantity;
               return (
                 <article className={`giant-list-row ${low ? 'row-attention' : ''}`} key={p.id} data-testid={`row-product-${p.id}`}>
                   {p.imageData ? (
@@ -1106,7 +1111,7 @@ function StockScreen() {
                   </div>
                   <div className="giant-row-right">
                     <strong>{p.quantity} {p.unit}</strong>
-                    {p.minimumQuantity !== null && <small>Mín. {p.minimumQuantity} {p.unit}</small>}
+                    {p.minimumQuantity !== null && p.minimumQuantity > 0 && <small>Mín. {p.minimumQuantity} {p.unit}</small>}
                   </div>
                   <div className="giant-row-actions">
                     <button type="button" className="giant-quick-tag in" onClick={() => { setMovementPref({ direction: 'in', productId: p.id }); setModal('movement'); }}>+ Entrada</button>
