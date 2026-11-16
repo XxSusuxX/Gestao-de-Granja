@@ -4,7 +4,7 @@ import {
   ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Camera, Check, ChevronLeft, ChevronRight,
   CircleDollarSign, CreditCard, Database, Egg, ImagePlus, Leaf, Lock, LogOut, Package,
   Plus, Sparkles, Sprout, Trash2, TrendingDown, TrendingUp, UserCheck, UserPlus, Wallet, X, Pencil, AlertTriangle,
-  RotateCcw, Bird, Wheat, Hand,
+  RotateCcw, Bird, Wheat, Hand, Settings,
 } from 'lucide-react';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
@@ -21,6 +21,7 @@ import {
 import type { Product, Movement, FinanceEntry } from '@workspace/api-client-react';
 import { Router as WouterRouter, useLocation } from 'wouter';
 import { PoultryPage, FeedingPage } from '@/pages/poultry-feeding';
+import { SettingsAndDeployScreen } from '@/pages/settings-deploy';
 
 const AUTH_STORAGE_KEY = 'granja_suenaga_token';
 const AUTH_USER_KEY = 'granja_suenaga_user';
@@ -306,10 +307,38 @@ function LoginScreen({ onAuthenticated }: { onAuthenticated: (user: AuthUser, to
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [username, setUsername] = useState('suenaga');
   const [displayName, setDisplayName] = useState('');
-  const [password, setPassword] = useState('1234');
+  const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { data: status } = useSystemStatus();
+
+  const handleDirectAccess = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: 'suenaga',
+          displayName: 'Granja Gabriel Suenaga',
+          password: '',
+        }),
+      });
+      const data = (await res.json()) as { token?: string; user?: AuthUser; error?: string };
+      if (!res.ok || !data.token || !data.user) {
+        setError(data.error || 'Não foi possível entrar no modo livre.');
+        setBusy(false);
+        return;
+      }
+      localStorage.setItem(AUTH_STORAGE_KEY, data.token);
+      localStorage.setItem(AUTH_USER_KEY, JSON.stringify(data.user));
+      onAuthenticated(data.user, data.token);
+    } catch {
+      setError('Erro de conexão com o servidor.');
+      setBusy(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -321,14 +350,14 @@ function LoginScreen({ onAuthenticated }: { onAuthenticated: (user: AuthUser, to
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          username: username.trim(),
-          displayName: displayName.trim() || username.trim(),
+          username: username.trim() || 'suenaga',
+          displayName: displayName.trim() || username.trim() || 'Granja Gabriel Suenaga',
           password: password.trim(),
         }),
       });
       const data = (await res.json()) as { token?: string; user?: AuthUser; error?: string };
       if (!res.ok || !data.token || !data.user) {
-        setError(data.error || 'Não foi possível entrar. Confira usuário e senha.');
+        setError(data.error || 'Não foi possível entrar.');
         setBusy(false);
         return;
       }
@@ -347,9 +376,30 @@ function LoginScreen({ onAuthenticated }: { onAuthenticated: (user: AuthUser, to
         <div className="login-brand">
           <span className="login-logo"><Egg size={40} /></span>
           <div>
-            <span className="login-kicker">SISTEMA PROTEGIDO · SUPABASE</span>
+            <span className="login-kicker">ACESSO LIVRE · SUPABASE MVP</span>
             <h1>Granja Suenaga</h1>
           </div>
+        </div>
+
+        {/* Card de Acesso Direto sem Senha */}
+        <div style={{ background: '#eaf5ed', border: '2px solid #84cc9a', borderRadius: '16px', padding: '16px', marginBottom: '16px', textAlign: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', color: '#135c34', fontWeight: 800, fontSize: '16px', marginBottom: '4px' }}>
+            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#16a34a', display: 'inline-block' }}></span>
+            Modo MVP Sem Senha
+          </div>
+          <p style={{ margin: '0 0 14px 0', fontSize: '14px', color: '#274332' }}>
+            Acesso liberado para navegação e testes rápidos sem bloqueio de senha.
+          </p>
+          <button
+            type="button"
+            className="button primary giant-btn"
+            style={{ width: '100%', fontSize: '18px', padding: '14px' }}
+            onClick={handleDirectAccess}
+            disabled={busy}
+          >
+            <UserCheck size={26} />
+            {busy ? 'Entrando…' : 'Acessar Granja Gabriel Suenaga'}
+          </button>
         </div>
 
         <div className="segmented-giant login-tabs">
@@ -359,7 +409,7 @@ function LoginScreen({ onAuthenticated }: { onAuthenticated: (user: AuthUser, to
             onClick={() => { setMode('login'); setError(null); }}
             data-testid="tab-login"
           >
-            <Lock size={24} /> Entrar
+            <Lock size={22} /> Entrar com Usuário
           </button>
           <button
             type="button"
@@ -367,13 +417,13 @@ function LoginScreen({ onAuthenticated }: { onAuthenticated: (user: AuthUser, to
             onClick={() => { setMode('register'); setUsername(''); setPassword(''); setError(null); }}
             data-testid="tab-register"
           >
-            <UserPlus size={24} /> Novo Usuário
+            <UserPlus size={22} /> Novo Usuário
           </button>
         </div>
 
         <form className="login-form" onSubmit={e => { void handleSubmit(e); }}>
           <label className="field-label">
-            Usuário
+            Nome de Usuário
             <input
               required
               autoFocus
@@ -386,25 +436,24 @@ function LoginScreen({ onAuthenticated }: { onAuthenticated: (user: AuthUser, to
 
           {mode === 'register' && (
             <label className="field-label">
-              Nome e Sobrenome (ex.: Gabriel Suenaga)
+              Nome Completo da Granja
               <input
                 required
                 value={displayName}
                 onChange={e => setDisplayName(e.target.value)}
-                placeholder="Ex.: Gabriel Suenaga"
+                placeholder="Ex.: Granja Gabriel Suenaga"
                 data-testid="input-register-displayname"
               />
             </label>
           )}
 
           <label className="field-label">
-            Senha / PIN
+            Senha (Opcional no MVP)
             <input
-              required
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              placeholder="Digite sua senha"
+              placeholder="Opcional (senha desativada para o MVP)"
               data-testid="input-login-password"
             />
           </label>
@@ -413,24 +462,13 @@ function LoginScreen({ onAuthenticated }: { onAuthenticated: (user: AuthUser, to
 
           <button
             type="submit"
-            className="button primary login-submit-btn"
-            disabled={busy || !username.trim() || !password.trim()}
+            className="button secondary login-submit-btn"
+            disabled={busy || !username.trim()}
             data-testid="button-login-submit"
           >
-            <UserCheck size={28} />
-            {busy ? 'Entrando…' : mode === 'login' ? 'Entrar na Granja' : 'Cadastrar e Entrar'}
+            <UserCheck size={26} />
+            {busy ? 'Entrando…' : mode === 'login' ? 'Entrar com este Usuário' : 'Criar e Entrar'}
           </button>
-
-          {mode === 'login' && (
-            <button
-              type="button"
-              className="button secondary login-quick-btn"
-              onClick={() => { setUsername('suenaga'); setPassword('1234'); }}
-              data-testid="button-fill-default-login"
-            >
-              Preencher Acesso Padrão (suenaga / 1234)
-            </button>
-          )}
         </form>
 
         <div className="login-footer">
@@ -1444,6 +1482,7 @@ const SLIDES = [
   { id: 'aves', path: '/aves', label: 'Aves', icon: Egg },
   { id: 'alimentacao', path: '/alimentacao', label: 'Ração', icon: Leaf },
   { id: 'contas', path: '/contas', label: 'Contas', icon: Wallet },
+  { id: 'configuracoes', path: '/configuracoes', label: 'Ajustes', icon: Settings },
 ] as const;
 
 function SwipeWorkspace({ user, onLogout }: { user: AuthUser; onLogout: () => void }) {
@@ -1570,7 +1609,25 @@ function SwipeWorkspace({ user, onLogout }: { user: AuthUser; onLogout: () => vo
           </strong>
         </div>
 
-        <div className="topbar-user">
+        <div className="topbar-user" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={() => goToSlide(5)}
+            title="Configurações e Deploy"
+            style={{
+              background: activeIndex === 5 ? '#2d5341' : 'transparent',
+              border: 'none',
+              borderRadius: '10px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              padding: '6px',
+              color: activeIndex === 5 ? '#ffffff' : '#eed788',
+            }}
+            data-testid="button-open-settings"
+          >
+            <Settings size={24} />
+          </button>
           <button
             type="button"
             className="logout-btn"
@@ -1627,6 +1684,16 @@ function SwipeWorkspace({ user, onLogout }: { user: AuthUser; onLogout: () => vo
         </section>
         <section className="swipe-slide" aria-label="Contas">
           <FinanceScreen />
+        </section>
+        <section className="swipe-slide" aria-label="Configurações e Deploy">
+          <SettingsAndDeployScreen
+            user={user}
+            onUpdateUser={(updated) => {
+              localStorage.setItem(AUTH_USER_KEY, JSON.stringify(updated));
+              window.location.reload();
+            }}
+            onGoToSlide={goToSlide}
+          />
         </section>
       </main>
 

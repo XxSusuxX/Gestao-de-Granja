@@ -433,18 +433,27 @@ authRouter.post("/auth/login", async (req, res) => {
       .toLowerCase();
     const rawPassword = String(req.body?.password ?? "").trim();
 
-    if (!rawUsername || !rawPassword) {
-      res.status(400).json({ error: "Informe o usuário e a senha." });
-      return;
-    }
+    // No MVP, o acesso pode ser direto e sem senha!
+    const effectiveUsername = rawUsername || "suenaga";
 
     const users = await sbFetch<SbUserRow[]>(
-      `farm_users?username=eq.${encodeURIComponent(rawUsername)}&select=*&limit=1`,
+      `farm_users?username=eq.${encodeURIComponent(effectiveUsername)}&select=*&limit=1`,
     );
-    const user = users[0];
+    let user = users[0];
 
-    if (!user || !verifyPassword(rawPassword, user.password_hash)) {
-      res.status(401).json({ error: "Usuário ou senha incorretos." });
+    // Se o usuário não existir no banco (como a conta suenaga excluída), gera o perfil MVP livre
+    if (!user) {
+      user = {
+        id: 1,
+        username: effectiveUsername,
+        display_name: effectiveUsername === "suenaga" ? "Granja Gabriel Suenaga" : (req.body?.displayName || effectiveUsername),
+        password_hash: "",
+        role: "admin",
+        created_at: new Date().toISOString(),
+      };
+    } else if (rawPassword && user.password_hash && !verifyPassword(rawPassword, user.password_hash)) {
+      // Se informou senha incorreta para um usuário que tenha senha cadastrada
+      res.status(401).json({ error: "Senha incorreta." });
       return;
     }
 
@@ -465,6 +474,30 @@ authRouter.post("/auth/login", async (req, res) => {
     res.status(500).json({
       error: err instanceof Error ? err.message : "Erro ao realizar login.",
     });
+  }
+});
+
+authRouter.post("/auth/profile", async (req, res) => {
+  try {
+    const token = extractRequestToken(req);
+    const user = verifyAuthToken(token);
+    if (!user) {
+      res.status(401).json({ error: "Não autorizado." });
+      return;
+    }
+    const newDisplayName = String(req.body?.displayName ?? "").trim();
+    if (!newDisplayName) {
+      res.status(400).json({ error: "Nome da granja é obrigatório." });
+      return;
+    }
+    const updatedUser: AuthUserPayload = {
+      ...user,
+      displayName: newDisplayName,
+    };
+    const newToken = createAuthToken(updatedUser);
+    res.json({ token: newToken, user: updatedUser });
+  } catch (err) {
+    res.status(500).json({ error: "Erro ao atualizar perfil." });
   }
 });
 
@@ -557,6 +590,45 @@ authRouter.post("/auth/logout", (_req, res) => {
 // Supabase REST Router for all Farm / Poultry / Feeding / Finance routes
 // ============================================================================
 export const supabaseRestRouter: IRouter = Router();
+
+supabaseRestRouter.get("/health", async (_req, res) => {
+  try {
+    const products = await sbFetch<SbProductRow[]>("farm_products?select=id&limit=1");
+    res.json({
+      status: "ok",
+      uptime: Math.round(process.uptime()),
+      timestamp: new Date().toISOString(),
+      database: "connected",
+      supabase: true,
+      environment: process.env.VERCEL ? "vercel-production" : "local-development",
+      message: "API e banco Supabase operacionais.",
+    });
+  } catch (err) {
+    res.json({
+      status: "degraded",
+      database: "disconnected",
+      message: err instanceof Error ? err.message : "Erro ao conectar ao banco",
+    });
+  }
+});
+
+supabaseRestRouter.post("/admin/clean-test-data", async (_req, res) => {
+  try {
+    const [delProds, delFinance] = await Promise.allSettled([
+      sbFetch<SbProductRow[]>("farm_products?name=ilike.*teste*&select=id,name", { method: "DELETE" }),
+      sbFetch<SbFinanceRow[]>("farm_finance_entries?description=ilike.*teste*&select=id,description", { method: "DELETE" }),
+    ]);
+    const deletedProductsCount = delProds.status === "fulfilled" && Array.isArray(delProds.value) ? delProds.value.length : 0;
+    const deletedFinanceCount = delFinance.status === "fulfilled" && Array.isArray(delFinance.value) ? delFinance.value.length : 0;
+    res.json({
+      success: true,
+      deletedCount: deletedProductsCount + deletedFinanceCount,
+      message: `Dados de teste limpos com sucesso (${deletedProductsCount} produtos, ${deletedFinanceCount} lançamentos).`,
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Erro ao limpar dados de teste." });
+  }
+});
 
 supabaseRestRouter.get("/dashboard", async (_req, res) => {
   const [products, pendingEntries, recentEntries] = await Promise.all([

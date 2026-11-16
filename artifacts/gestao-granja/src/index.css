@@ -1136,7 +1136,7 @@ body,
   background: #fffdf8;
   border-top: 3px solid #d4dac9;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   padding: 4px clamp(6px, 1.8vw, 24px);
   gap: 6px;
   z-index: 40;
