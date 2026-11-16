@@ -25,9 +25,47 @@ interface EndpointTest {
   latency?: number;
 }
 
+interface RegisteredAccount {
+  id: number;
+  username: string;
+  displayName: string;
+  role: string;
+  createdAt: string;
+  productCount: number;
+  lotCount: number;
+  recipeCount: number;
+  feedLogCount: number;
+  financeCount: number;
+}
+
 export function SettingsAndDeployScreen({ user, onUpdateUser, onGoToSlide }: SettingsAndDeployScreenProps) {
   const { toast } = useToast();
-  const [subView, setSubView] = useState<'config' | 'deploy'>('config');
+  const [subView, setSubView] = useState<'config' | 'users' | 'deploy'>('config');
+
+  // Contas Registradas
+  const [adminUsers, setAdminUsers] = useState<RegisteredAccount[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+
+  const loadUsers = async () => {
+    setLoadingUsers(true);
+    try {
+      const res = await fetch('/api/admin/users');
+      if (res.ok) {
+        const data = await res.json();
+        setAdminUsers(data.users || []);
+      }
+    } catch (err) {
+      console.error('Erro ao listar contas:', err);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  useEffect(() => {
+    if (subView === 'users') {
+      void loadUsers();
+    }
+  }, [subView]);
 
   // Configurações da Granja
   const [farmName, setFarmName] = useState(user.displayName || 'Granja Gabriel Suenaga');
@@ -173,14 +211,21 @@ export function SettingsAndDeployScreen({ user, onUpdateUser, onGoToSlide }: Set
           className={subView === 'config' ? 'selected' : ''}
           onClick={() => setSubView('config')}
         >
-          <Settings size={24} /> Configurações da Granja
+          <Settings size={24} /> Configurações
+        </button>
+        <button
+          type="button"
+          className={subView === 'users' ? 'selected' : ''}
+          onClick={() => setSubView('users')}
+        >
+          <ShieldCheck size={24} /> Contas Registradas ({adminUsers.length || '…'})
         </button>
         <button
           type="button"
           className={subView === 'deploy' ? 'selected' : ''}
           onClick={() => setSubView('deploy')}
         >
-          <Rocket size={24} /> Deploy & Produção Vercel
+          <Rocket size={24} /> Deploy & Vercel
         </button>
       </div>
 
@@ -320,6 +365,93 @@ export function SettingsAndDeployScreen({ user, onUpdateUser, onGoToSlide }: Set
                 <Trash2 size={20} /> {cleaningData ? 'Limpando…' : 'Limpar Registros de Teste'}
               </button>
             </div>
+          </div>
+        </div>
+      ) : subView === 'users' ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div className="card" style={{ padding: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ background: '#203b30', color: '#eed788', padding: '10px', borderRadius: '12px' }}>
+                  <ShieldCheck size={26} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 700 }}>Contas Registradas no Banco de Dados</h3>
+                  <small style={{ color: '#4b6354' }}>Cada usuário possui banco isolado com seu próprio plantel, estoque e finanças</small>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="button secondary"
+                onClick={() => void loadUsers()}
+                disabled={loadingUsers}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                <RefreshCw size={18} className={loadingUsers ? 'spin' : ''} />
+                <span>{loadingUsers ? 'Atualizando…' : 'Atualizar Lista'}</span>
+              </button>
+            </div>
+
+            {loadingUsers ? (
+              <div className="giant-empty" style={{ padding: '30px' }}>Carregando contas do banco…</div>
+            ) : adminUsers.length === 0 ? (
+              <div className="giant-empty" style={{ padding: '30px' }}>Nenhuma conta encontrada.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {adminUsers.map((u) => {
+                  const isCurrent = u.id === user.id;
+                  const dateStr = u.createdAt ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(u.createdAt)) : '—';
+                  return (
+                    <article
+                      key={u.id}
+                      style={{
+                        padding: '18px 20px',
+                        borderRadius: '14px',
+                        background: isCurrent ? '#f0fdf4' : '#fafafa',
+                        border: `2px solid ${isCurrent ? '#86efac' : '#e5e7eb'}`,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '12px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <span style={{ background: '#203b30', color: '#fff', padding: '6px 12px', borderRadius: '8px', fontWeight: 800, fontSize: '14px' }}>
+                            ID #{u.id}
+                          </span>
+                          <strong style={{ fontSize: '18px', color: '#16382b' }}>@{u.username}</strong>
+                          <span style={{ color: '#4b6354', fontWeight: 600 }}>({u.displayName})</span>
+                          {isCurrent && (
+                            <span style={{ background: '#16a34a', color: '#fff', padding: '3px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 700 }}>
+                              Sua Sessão Atual
+                            </span>
+                          )}
+                        </div>
+                        <small style={{ color: '#6b7280', fontSize: '13px' }}>Cadastrado em: {dateStr}</small>
+                      </div>
+
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                        <span style={{ background: '#fff', border: '1px solid #d1d5db', padding: '6px 12px', borderRadius: '10px', fontSize: '14px', fontWeight: 600 }}>
+                          📦 Produtos em Estoque: <b>{u.productCount}</b>
+                        </span>
+                        <span style={{ background: '#fff', border: '1px solid #d1d5db', padding: '6px 12px', borderRadius: '10px', fontSize: '14px', fontWeight: 600 }}>
+                          🐔 Lotes de Aves: <b>{u.lotCount}</b>
+                        </span>
+                        <span style={{ background: '#fff', border: '1px solid #d1d5db', padding: '6px 12px', borderRadius: '10px', fontSize: '14px', fontWeight: 600 }}>
+                          🌾 Receitas de Ração: <b>{u.recipeCount}</b>
+                        </span>
+                        <span style={{ background: '#fff', border: '1px solid #d1d5db', padding: '6px 12px', borderRadius: '10px', fontSize: '14px', fontWeight: 600 }}>
+                          🥣 Tratos Servidos: <b>{u.feedLogCount}</b>
+                        </span>
+                        <span style={{ background: '#fff', border: '1px solid #d1d5db', padding: '6px 12px', borderRadius: '10px', fontSize: '14px', fontWeight: 600 }}>
+                          💰 Lançamentos Financeiros: <b>{u.financeCount}</b>
+                        </span>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       ) : (

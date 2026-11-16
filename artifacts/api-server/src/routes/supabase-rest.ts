@@ -387,6 +387,53 @@ async function loadRecipesFromSupabase(userId?: number) {
     sbFetch<SbProductRow[]>(`farm_products?${userFilter}select=*`),
   ]);
 
+  // Se o usuário tem produtos de ração/alimentação no estoque que ainda não possuem receita,
+  // cria automaticamente uma receita pronta 1:1 para que o usuário possa servir imediatamente.
+  if (userId && products.length > 0) {
+    const feedProducts = products.filter(
+      (p) =>
+        p.category === "feed" &&
+        (p.unit.toLowerCase().includes("kg") ||
+          p.unit.toLowerCase() === "quilo" ||
+          p.unit.toLowerCase() === "quilos"),
+    );
+    for (const fp of feedProducts) {
+      const alreadyHas = recipes.some(
+        (r) =>
+          r.name.toLowerCase().trim() === fp.name.toLowerCase().trim() ||
+          ingredients.some((i) => i.recipe_id === r.id && i.product_id === fp.id),
+      );
+      if (!alreadyHas) {
+        try {
+          const [newR] = await sbFetch<SbRecipeRow[]>("farm_feed_recipes", {
+            method: "POST",
+            body: JSON.stringify({ user_id: userId, name: fp.name }),
+          });
+          if (newR) {
+            const [newIng] = await sbFetch<SbRecipeIngredientRow[]>(
+              "farm_feed_recipe_ingredients",
+              {
+                method: "POST",
+                body: JSON.stringify([
+                  {
+                    user_id: userId,
+                    recipe_id: newR.id,
+                    product_id: fp.id,
+                    quantity_kg: Number(fp.quantity) > 0 ? Number(fp.quantity) : 50,
+                  },
+                ]),
+              },
+            );
+            recipes.push(newR);
+            if (newIng) ingredients.push(newIng);
+          }
+        } catch (e) {
+          console.warn("Auto recipe sync notice:", e);
+        }
+      }
+    }
+  }
+
   const productMap = new Map(products.map((p) => [p.id, p]));
 
   return recipes.map((recipe) => {
@@ -657,6 +704,39 @@ supabaseRestRouter.post("/admin/clean-test-data", async (req, res) => {
   }
 });
 
+supabaseRestRouter.get("/admin/users", async (_req, res) => {
+  try {
+    const [users, products, lots, recipes, logs, finance] = await Promise.all([
+      sbFetch<SbUserRow[]>("farm_users?select=id,username,display_name,role,created_at&order=id.asc"),
+      sbFetch<Array<{ user_id?: number }>>("farm_products?select=user_id"),
+      sbFetch<Array<{ user_id?: number }>>("farm_poultry_lots?select=user_id"),
+      sbFetch<Array<{ user_id?: number }>>("farm_feed_recipes?select=user_id"),
+      sbFetch<Array<{ user_id?: number }>>("farm_feeding_logs?select=user_id"),
+      sbFetch<Array<{ user_id?: number }>>("farm_finance_entries?select=user_id"),
+    ]);
+
+    const countBy = (items: Array<{ user_id?: number }>, uid: number) =>
+      items.filter((i) => i.user_id === uid).length;
+
+    const formatted = users.map((u) => ({
+      id: u.id,
+      username: u.username,
+      displayName: u.display_name,
+      role: u.role,
+      createdAt: u.created_at,
+      productCount: countBy(products, u.id),
+      lotCount: countBy(lots, u.id),
+      recipeCount: countBy(recipes, u.id),
+      feedLogCount: countBy(logs, u.id),
+      financeCount: countBy(finance, u.id),
+    }));
+
+    res.json({ users: formatted });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Erro ao carregar lista de usuários." });
+  }
+});
+
 supabaseRestRouter.get("/dashboard", async (req, res) => {
   try {
     const userId = getReqUserId(req);
@@ -733,6 +813,61 @@ supabaseRestRouter.post("/inventory/products", async (req, res) => {
       image_signature: parsed.data.imageSignature ?? null,
     }),
   });
+
+  // Registra movimentação de entrada inicial se quantidade > 0
+  if (product && parsed.data.quantity > 0) {
+    try {
+      await sbFetch("farm_stock_movements", {
+        method: "POST",
+        body: JSON.stringify({
+          user_id: userId,
+          product_id: product.id,
+          direction: "in",
+          quantity: parsed.data.quantity,
+          note: "Cadastro inicial / Entrada no estoque",
+        }),
+      });
+    } catch (moveErr) {
+      console.warn("Notice: Initial stock movement registration:", moveErr);
+    }
+  }
+
+  // Se o produto for Alimentação/Ração em kg, cria automaticamente a receita para uso no trato
+  if (
+    product &&
+    parsed.data.category === "feed" &&
+    (parsed.data.unit.toLowerCase().includes("kg") ||
+      parsed.data.unit.toLowerCase() === "quilo" ||
+      parsed.data.unit.toLowerCase() === "quilos")
+  ) {
+    try {
+      const existing = await sbFetch<SbRecipeRow[]>(
+        `farm_feed_recipes?user_id=eq.${userId}&name=eq.${encodeURIComponent(product.name)}&select=id&limit=1`,
+      );
+      if (!existing || existing.length === 0) {
+        const [newRecipe] = await sbFetch<SbRecipeRow[]>("farm_feed_recipes", {
+          method: "POST",
+          body: JSON.stringify({ user_id: userId, name: product.name }),
+        });
+        if (newRecipe) {
+          await sbFetch("farm_feed_recipe_ingredients", {
+            method: "POST",
+            body: JSON.stringify([
+              {
+                user_id: userId,
+                recipe_id: newRecipe.id,
+                product_id: product.id,
+                quantity_kg: parsed.data.quantity > 0 ? parsed.data.quantity : 50,
+              },
+            ]),
+          });
+        }
+      }
+    } catch (recipeErr) {
+      console.warn("Notice: Auto recipe creation:", recipeErr);
+    }
+  }
+
   res.status(201).json(CreateProductResponse.parse(presentProduct(product)));
 });
 
@@ -2502,7 +2637,7 @@ supabaseRestRouter.post("/feeding/logs", async (req, res) => {
     );
     if (Number(product.quantity) + 0.0000001 < quantityUsed) {
       res.status(400).json({
-        error: `Estoque insuficiente de ${product.name} para essa alimentação.`,
+        error: `Estoque insuficiente de ${product.name} para essa alimentação. Disponível: ${product.quantity} kg, necessário: ${quantityUsed} kg. Adicione mais ração ao estoque antes de servir.`,
       });
       return;
     }

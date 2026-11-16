@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useGetPoultrySummary, getGetPoultrySummaryQueryKey, useGetPoultryLots, getGetPoultryLotsQueryKey,
@@ -8,6 +8,7 @@ import {
   useCreateFeedRecipe, useUpdateFeedRecipe, useDeleteFeedRecipe,
   useGetFeedLogs, getGetFeedLogsQueryKey, useCreateFeedLog, useDeleteFeedLog,
   useGetProducts, getGetProductsQueryKey, getGetDashboardQueryKey, getGetMovementsQueryKey,
+  useCreateProduct,
 } from '@workspace/api-client-react';
 import type { PoultryLot, PoultryMovement, FeedRecipe, FeedLog, Product } from '@workspace/api-client-react';
 import {
@@ -230,47 +231,548 @@ export function PoultryPage() {
   </div>;
 }
 
-function RecipeForm({ initial, products, busy, close, save }: { initial?: FeedRecipe; products: Product[]; busy: boolean; close: () => void; save: (data: { name: string; ingredients: { productId: number; quantityKg: number }[] }) => void }) {
-  const [name, setName] = useState(initial?.name ?? '');
-  const [ingredients, setIngredients] = useState<{ productId: number; quantityKg: string }[]>(initial?.ingredients.map(i => ({ productId: i.productId, quantityKg: String(i.quantityKg) })) ?? []);
-  const addIngredient = (id: number) => setIngredients(old => old.some(i => i.productId === id) ? old : [...old, { productId: id, quantityKg: '' }]);
-  const selectedIds = new Set(ingredients.map(i => i.productId));
-  return <form className="modal-form" onSubmit={e => { e.preventDefault(); save({ name: name.trim(), ingredients: ingredients.filter(i => Number(i.quantityKg) > 0).map(i => ({ productId: i.productId, quantityKg: Number(i.quantityKg) })) }); }}>
-    <label className="field-label">Nome da receita<input autoFocus required value={name} onChange={e => setName(e.target.value)} placeholder="Ex.: Ração Postura" data-testid="input-recipe-name" />
-      {!initial && <div className="suggestion-row">
-        {['Mistura Postura', 'Mistura Engorda', 'Ração Pintinhos'].map(s => <button type="button" key={s} onClick={() => setName(s)} className="suggestion-chip">{s}</button>)}
-      </div>}
-    </label>
-    <div className="field-label">Toque nos ingredientes (em kg)
-      {products.length ? <div className="ingredient-picks">{products.map(p => <button type="button" key={p.id} disabled={selectedIds.has(p.id)} onClick={() => addIngredient(p.id)} data-testid={`button-add-ingredient-${p.id}`}><Plus size={20} />{p.name} ({p.quantity} kg)</button>)}</div> : <p className="field-hint">Cadastre produtos de alimentação em kg no estoque primeiro.</p>}
-    </div>
-    {ingredients.map(item => { const p = products.find(x => x.id === item.productId); return <div className="ingredient-line" key={item.productId}><span><b>{p?.name ?? `Item ${item.productId}`}</b><small>Estoque: {p?.quantity ?? '—'} kg</small></span><label className="field-label">Quilos (kg)<input type="number" required min="0.01" step="any" value={item.quantityKg} onChange={e => setIngredients(old => old.map(i => i.productId === item.productId ? { ...i, quantityKg: e.target.value } : i))} placeholder="kg" /></label><button type="button" className="icon-button giant-icon-btn danger-icon" aria-label={`Remover ${p?.name ?? 'ingrediente'}`} onClick={() => setIngredients(old => old.filter(i => i.productId !== item.productId))}><X size={24} /></button></div>; })}
-    <div className="modal-actions"><button type="button" className="button secondary" onClick={close}>Cancelar</button><button className="button primary" disabled={busy || !name.trim() || !ingredients.length || ingredients.some(i => !Number(i.quantityKg))} data-testid="button-save-recipe">{busy ? 'Salvando…' : 'Salvar Receita'}</button></div>
-  </form>;
-}
+function QuickAddFeedForm({
+  busy,
+  close,
+  onSaved,
+}: {
+  busy: boolean;
+  close: () => void;
+  onSaved?: (productName: string) => void;
+}) {
+  const [name, setName] = useState('');
+  const [quantity, setQuantity] = useState('50');
+  const [cost, setCost] = useState('2.50');
+  const [error, setError] = useState<string | null>(null);
+  const createProduct = useCreateProduct();
+  const refresh = useRefresh();
 
-function FeedLogForm({ lots, recipes, busy, close, save }: { lots: PoultryLot[]; recipes: FeedRecipe[]; busy: boolean; close: () => void; save: (data: { lotId: number; recipeId: number; quantityKg: number; feedingDate: string }) => void }) {
-  const [lotId, setLot] = useState(lots[0]?.id ?? 0);
-  const [recipeId, setRecipe] = useState(recipes[0]?.id ?? 0);
-  const [quantity, setQuantity] = useState('');
-  const [date, setDate] = useState(day());
-  const selectedRecipe = recipes.find(r => r.id === Number(recipeId));
-  const estimatedCost = selectedRecipe?.costPerKg != null && Number(quantity) > 0 ? selectedRecipe.costPerKg * Number(quantity) : null;
-  return <form className="modal-form" onSubmit={e => { e.preventDefault(); save({ lotId: Number(lotId), recipeId: Number(recipeId), quantityKg: Number(quantity), feedingDate: date }); }}>
-    {!lots.length || !recipes.length ? <p className="field-hint">Cadastre um lote ativo e uma receita de ração primeiro.</p> : <>
-      <label className="field-label">1. Escolha o lote<div className="product-choice-list">{lots.map(l => <button type="button" key={l.id} className={`product-choice ${Number(lotId) === l.id ? 'selected' : ''}`} onClick={() => setLot(l.id)}><span className="product-choice-name">{l.label}</span><span>{l.currentCount} aves</span></button>)}</div></label>
-      <label className="field-label">2. Escolha a ração<div className="product-choice-list">{recipes.map(r => <button type="button" key={r.id} className={`product-choice ${Number(recipeId) === r.id ? 'selected' : ''}`} onClick={() => setRecipe(r.id)}><span className="product-choice-name">{r.name}</span><span>{r.costPerKg !== null ? `${cash(r.costPerKg)}/kg` : `${r.batchWeightKg} kg`}</span></button>)}</div></label>
+  const quickFeeds = ['Ração Postura', 'Ração Inicial', 'Ração Crescimento', 'Milho em Grão', 'Farelo de Soja', 'Núcleo Postura'];
+  const quickQtys = [25, 50, 100, 250, 500];
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) {
+      setError('Informe o nome da ração.');
+      return;
+    }
+    const q = Number(quantity);
+    if (!q || q <= 0) {
+      setError('Informe uma quantidade válida em kg.');
+      return;
+    }
+    setError(null);
+    createProduct.mutate(
+      {
+        data: {
+          name: name.trim(),
+          category: 'feed',
+          unit: 'kg',
+          quantity: q,
+          unitCost: cost ? Number(cost) : undefined,
+        },
+      },
+      {
+        onSuccess: () => {
+          refresh(
+            getGetProductsQueryKey(),
+            getGetFeedRecipesQueryKey(),
+            getGetDashboardQueryKey(),
+            getGetMovementsQueryKey()
+          );
+          onSaved?.(name.trim());
+          close();
+        },
+        onError: (err: any) => {
+          const msg =
+            err?.response?.data?.error ||
+            err?.message ||
+            'Erro ao adicionar ração ao estoque.';
+          setError(msg);
+        },
+      }
+    );
+  };
+
+  return (
+    <form className="modal-form" onSubmit={handleSubmit}>
+      {error && (
+        <div className="login-error" style={{ marginBottom: 14 }}>
+          {error}
+        </div>
+      )}
+      <label className="field-label">
+        Nome da ração
+        <input
+          autoFocus
+          required
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Ex.: Ração Postura"
+          data-testid="input-quick-feed-name"
+        />
+        <div className="suggestion-row">
+          {quickFeeds.map((f) => (
+            <button
+              type="button"
+              key={f}
+              onClick={() => setName(f)}
+              className="suggestion-chip"
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+      </label>
+
       <div className="form-row">
-        <label className="field-label">3. Quantos quilos (kg)?<input type="number" required min="0.01" step="any" value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="kg" data-testid="input-feed-quantity" />
-          <div className="suggestion-row">{quickFeedKg.map(kg => <button type="button" key={kg} onClick={() => setQuantity(String(kg))} className="suggestion-chip">{kg} kg</button>)}</div>
+        <label className="field-label">
+          Quantidade (kg)
+          <input
+            required
+            type="number"
+            min="0.1"
+            step="any"
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+            placeholder="50"
+            data-testid="input-quick-feed-qty"
+          />
+          <div className="suggestion-row">
+            {quickQtys.map((kg) => (
+              <button
+                type="button"
+                key={kg}
+                onClick={() => setQuantity(String(kg))}
+                className="suggestion-chip"
+              >
+                +{kg} kg
+              </button>
+            ))}
+          </div>
         </label>
-        <label className="field-label">Data<input type="date" required value={date} onChange={e => setDate(e.target.value)} />
-          {estimatedCost !== null && <span className="field-hint">Custo: <b>{cash(estimatedCost)}</b></span>}
+
+        <label className="field-label">
+          Preço por kg (R$) <span className="optional">opcional</span>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={cost}
+            onChange={(e) => setCost(e.target.value)}
+            placeholder="Ex.: 2.50"
+            data-testid="input-quick-feed-cost"
+          />
         </label>
       </div>
-    </>}
-    <div className="modal-actions"><button type="button" className="button secondary" onClick={close}>Cancelar</button><button className="button primary" disabled={busy || !lots.length || !recipes.length || !quantity} data-testid="button-save-feed-log">{busy ? 'Salvando…' : 'Confirmar Trato'}</button></div>
-  </form>;
+
+      <p className="field-hint" style={{ marginTop: 4 }}>
+        💡 Essa ração será cadastrada no seu estoque e ficará imediatamente pronta para você dar baixa ao servir suas aves.
+      </p>
+
+      <div className="modal-actions">
+        <button type="button" className="button secondary" onClick={close}>
+          Cancelar
+        </button>
+        <button
+          className="button primary"
+          disabled={busy || createProduct.isPending || !name.trim()}
+          data-testid="button-save-quick-feed"
+        >
+          {busy || createProduct.isPending ? 'Salvando no Estoque…' : 'Salvar no Estoque'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function RecipeForm({
+  initial,
+  products,
+  busy,
+  close,
+  save,
+  openAddFeed,
+}: {
+  initial?: FeedRecipe;
+  products: Product[];
+  busy: boolean;
+  close: () => void;
+  save: (data: { name: string; ingredients: { productId: number; quantityKg: number }[] }) => void;
+  openAddFeed: () => void;
+}) {
+  const [name, setName] = useState(initial?.name ?? '');
+  const [ingredients, setIngredients] = useState<{ productId: number; quantityKg: string }[]>(
+    initial?.ingredients.map((i) => ({ productId: i.productId, quantityKg: String(i.quantityKg) })) ?? []
+  );
+  const [error, setError] = useState<string | null>(null);
+  const addIngredient = (id: number) =>
+    setIngredients((old) => (old.some((i) => i.productId === id) ? old : [...old, { productId: id, quantityKg: '' }]));
+  const selectedIds = new Set(ingredients.map((i) => i.productId));
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) {
+      setError('Informe o nome da receita.');
+      return;
+    }
+    const validIngs = ingredients
+      .filter((i) => Number(i.quantityKg) > 0)
+      .map((i) => ({ productId: i.productId, quantityKg: Number(i.quantityKg) }));
+    if (!validIngs.length) {
+      setError('Adicione pelo menos um ingrediente com peso válido em kg.');
+      return;
+    }
+    setError(null);
+    save({ name: name.trim(), ingredients: validIngs });
+  };
+
+  return (
+    <form className="modal-form" onSubmit={handleSubmit}>
+      {error && <div className="login-error" style={{ marginBottom: 12 }}>{error}</div>}
+      <label className="field-label">
+        Nome da receita
+        <input
+          autoFocus
+          required
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Ex.: Ração Postura"
+          data-testid="input-recipe-name"
+        />
+        {!initial && (
+          <div className="suggestion-row">
+            {['Mistura Postura', 'Mistura Engorda', 'Ração Pintinhos'].map((s) => (
+              <button type="button" key={s} onClick={() => setName(s)} className="suggestion-chip">
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
+      </label>
+      <div className="field-label">
+        Toque nos ingredientes (em kg)
+        {products.length ? (
+          <div className="ingredient-picks">
+            {products.map((p) => (
+              <button
+                type="button"
+                key={p.id}
+                disabled={selectedIds.has(p.id)}
+                onClick={() => addIngredient(p.id)}
+                data-testid={`button-add-ingredient-${p.id}`}
+              >
+                <Plus size={20} />
+                {p.name} ({p.quantity} kg)
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div style={{ marginTop: 8 }}>
+            <p className="field-hint" style={{ marginBottom: 10 }}>
+              Você ainda não tem ingredientes cadastrados no seu estoque.
+            </p>
+            <button
+              type="button"
+              className="button secondary giant-btn"
+              onClick={openAddFeed}
+              style={{ width: '100%', justifyContent: 'center' }}
+            >
+              <Plus size={22} /> + Adicionar Ração / Ingrediente ao Estoque
+            </button>
+          </div>
+        )}
+      </div>
+      {ingredients.map((item) => {
+        const p = products.find((x) => x.id === item.productId);
+        return (
+          <div className="ingredient-line" key={item.productId}>
+            <span>
+              <b>{p?.name ?? `Item ${item.productId}`}</b>
+              <small>Estoque: {p?.quantity ?? '—'} kg</small>
+            </span>
+            <label className="field-label">
+              Quilos (kg)
+              <input
+                type="number"
+                required
+                min="0.01"
+                step="any"
+                value={item.quantityKg}
+                onChange={(e) =>
+                  setIngredients((old) =>
+                    old.map((i) => (i.productId === item.productId ? { ...i, quantityKg: e.target.value } : i))
+                  )
+                }
+                placeholder="kg"
+              />
+            </label>
+            <button
+              type="button"
+              className="icon-button giant-icon-btn danger-icon"
+              aria-label={`Remover ${p?.name ?? 'ingrediente'}`}
+              onClick={() => setIngredients((old) => old.filter((i) => i.productId !== item.productId))}
+            >
+              <X size={24} />
+            </button>
+          </div>
+        );
+      })}
+      <div className="modal-actions">
+        <button type="button" className="button secondary" onClick={close}>
+          Cancelar
+        </button>
+        <button
+          className="button primary"
+          disabled={busy || !name.trim() || !ingredients.length || ingredients.some((i) => !Number(i.quantityKg))}
+          data-testid="button-save-recipe"
+        >
+          {busy ? 'Salvando…' : 'Salvar Receita'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function FeedLogForm({
+  lots,
+  recipes,
+  feedProducts,
+  busy,
+  close,
+  save,
+  openAddFeed,
+  openNewLot,
+}: {
+  lots: PoultryLot[];
+  recipes: FeedRecipe[];
+  feedProducts: Product[];
+  busy: boolean;
+  close: () => void;
+  save: (
+    data: { lotId: number; recipeId: number; quantityKg: number; feedingDate: string },
+    onError: (msg: string) => void
+  ) => void;
+  openAddFeed: () => void;
+  openNewLot: () => void;
+}) {
+  const [lotId, setLot] = useState<number>(() => lots[0]?.id ?? 0);
+  const [recipeId, setRecipe] = useState<number>(() => recipes[0]?.id ?? 0);
+  const [quantity, setQuantity] = useState('');
+  const [date, setDate] = useState(day());
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if ((!lotId || !lots.some((l) => l.id === lotId)) && lots.length > 0) {
+      setLot(lots[0].id);
+    }
+  }, [lots, lotId]);
+
+  useEffect(() => {
+    if ((!recipeId || !recipes.some((r) => r.id === recipeId)) && recipes.length > 0) {
+      setRecipe(recipes[0].id);
+    }
+  }, [recipes, recipeId]);
+
+  const selectedRecipe = recipes.find((r) => r.id === Number(recipeId));
+  const estimatedCost =
+    selectedRecipe?.costPerKg != null && Number(quantity) > 0
+      ? selectedRecipe.costPerKg * Number(quantity)
+      : null;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!lotId) {
+      setError('Selecione um lote de aves ativo.');
+      return;
+    }
+    if (!recipeId) {
+      setError('Selecione a ração a ser servida.');
+      return;
+    }
+    const q = Number(quantity);
+    if (!q || q <= 0) {
+      setError('Informe a quantidade de ração em kg.');
+      return;
+    }
+    setError(null);
+    save(
+      {
+        lotId: Number(lotId),
+        recipeId: Number(recipeId),
+        quantityKg: q,
+        feedingDate: date,
+      },
+      (msg) => setError(msg)
+    );
+  };
+
+  if (!lots.length) {
+    return (
+      <div className="modal-form">
+        <div className="login-error" style={{ background: '#fef3c7', borderColor: '#f59e0b', color: '#92400e' }}>
+          <b>Nenhum lote de aves ativo</b>
+          <p style={{ marginTop: 6, fontSize: '0.95rem' }}>
+            Para servir ração, é necessário ter pelo menos um lote de aves cadastrado no galinheiro.
+          </p>
+        </div>
+        <div className="modal-actions" style={{ marginTop: 16 }}>
+          <button type="button" className="button secondary" onClick={close}>
+            Cancelar
+          </button>
+          <button type="button" className="button primary" onClick={openNewLot}>
+            <Plus size={22} /> Cadastrar Lote Agora
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!recipes.length) {
+    return (
+      <div className="modal-form">
+        <div className="login-error" style={{ background: '#fef3c7', borderColor: '#f59e0b', color: '#92400e' }}>
+          <b>Nenhuma ração no estoque</b>
+          <p style={{ marginTop: 6, fontSize: '0.95rem' }}>
+            Você ainda não cadastrou nenhuma ração no seu estoque para dar baixa.
+          </p>
+        </div>
+        <div className="modal-actions" style={{ marginTop: 16 }}>
+          <button type="button" className="button secondary" onClick={close}>
+            Cancelar
+          </button>
+          <button type="button" className="button primary" onClick={openAddFeed}>
+            <Plus size={22} /> + Adicionar Ração ao Estoque
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <form className="modal-form" onSubmit={handleSubmit}>
+      {error && (
+        <div className="login-error" style={{ marginBottom: 12 }}>
+          {error}
+        </div>
+      )}
+
+      <label className="field-label">
+        1. Escolha o lote de aves
+        <div className="product-choice-list">
+          {lots.map((l) => (
+            <button
+              type="button"
+              key={l.id}
+              className={`product-choice ${Number(lotId) === l.id ? 'selected' : ''}`}
+              onClick={() => {
+                setLot(l.id);
+                setError(null);
+              }}
+            >
+              <span className="product-choice-name">{l.label}</span>
+              <span>{l.currentCount} aves</span>
+            </button>
+          ))}
+        </div>
+      </label>
+
+      <label className="field-label">
+        2. Escolha a ração
+        <div className="product-choice-list">
+          {recipes.map((r) => (
+            <button
+              type="button"
+              key={r.id}
+              className={`product-choice ${Number(recipeId) === r.id ? 'selected' : ''}`}
+              onClick={() => {
+                setRecipe(r.id);
+                setError(null);
+              }}
+            >
+              <span className="product-choice-name">{r.name}</span>
+              <span>
+                {r.costPerKg !== null
+                  ? `${cash(r.costPerKg)}/kg`
+                  : `${r.batchWeightKg} kg`}
+              </span>
+            </button>
+          ))}
+        </div>
+      </label>
+
+      {selectedRecipe && selectedRecipe.ingredients.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '-4px 0 8px 0' }}>
+          {selectedRecipe.ingredients.map((ing) => (
+            <span key={ing.productId} className="giant-ing-pill" style={{ fontSize: '0.88rem' }}>
+              {ing.productName}: <b>{ing.availableQuantity ?? 0} kg disp.</b>
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="form-row">
+        <label className="field-label">
+          3. Quantos quilos (kg)?
+          <input
+            type="number"
+            required
+            min="0.01"
+            step="any"
+            value={quantity}
+            onChange={(e) => {
+              setQuantity(e.target.value);
+              setError(null);
+            }}
+            placeholder="kg"
+            data-testid="input-feed-quantity"
+          />
+          <div className="suggestion-row">
+            {quickFeedKg.map((kg) => (
+              <button
+                type="button"
+                key={kg}
+                onClick={() => {
+                  setQuantity(String(kg));
+                  setError(null);
+                }}
+                className="suggestion-chip"
+              >
+                {kg} kg
+              </button>
+            ))}
+          </div>
+        </label>
+        <label className="field-label">
+          Data
+          <input
+            type="date"
+            required
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+          />
+          {estimatedCost !== null && (
+            <span className="field-hint">
+              Custo do trato: <b>{cash(estimatedCost)}</b>
+            </span>
+          )}
+        </label>
+      </div>
+
+      <div className="modal-actions">
+        <button type="button" className="button secondary" onClick={close}>
+          Cancelar
+        </button>
+        <button
+          className="button primary"
+          disabled={busy || !lots.length || !recipes.length || !quantity}
+          data-testid="button-save-feed-log"
+        >
+          {busy ? 'Dando Baixa…' : 'Confirmar Trato e Dar Baixa'}
+        </button>
+      </div>
+    </form>
+  );
 }
 
 export function FeedingPage() {
@@ -285,13 +787,16 @@ export function FeedingPage() {
   const createLog = useCreateFeedLog();
   const deleteLog = useDeleteFeedLog();
   const refresh = useRefresh();
-  const [modal, setModal] = useState<'recipe' | 'log' | null>(null);
+  const [modal, setModal] = useState<'recipe' | 'log' | 'add-stock' | null>(null);
   const [editing, setEditing] = useState<FeedRecipe>();
   const [subView, setSubView] = useState<'recipes' | 'logs'>('recipes');
   const [page, setPage] = useState(0);
 
   const recipes = recipesQuery.data ?? [];
   const logs = (logsQuery.data ?? []).slice().sort((a, b) => +new Date(b.feedingDate) - +new Date(a.feedingDate));
+  const feedProducts = (productsQuery.data ?? []).filter(
+    (p) => p.category === 'feed' && (p.unit.toLowerCase().includes('kg') || p.unit.toLowerCase() === 'quilo')
+  );
 
   const perPage = 2;
   const totalRecipePages = Math.max(1, Math.ceil(recipes.length / perPage));
@@ -303,115 +808,375 @@ export function FeedingPage() {
   const safeLogPage = Math.min(page, totalLogPages - 1);
   const visibleLogs = logs.slice(safeLogPage * logsPerPage, (safeLogPage + 1) * logsPerPage);
 
-  const invalidateRecipe = () => refresh(getGetFeedRecipesQueryKey(), getGetProductsQueryKey());
+  const invalidateRecipe = () => refresh(getGetFeedRecipesQueryKey(), getGetProductsQueryKey(), getGetDashboardQueryKey());
+
   const saveRecipe = (d: { name: string; ingredients: { productId: number; quantityKg: number }[] }) => {
-    if (editing) updateRecipe.mutate({ recipeId: editing.id, data: d }, { onSuccess: () => { invalidateRecipe(); setModal(null); setEditing(undefined); } });
-    else createRecipe.mutate({ data: d }, { onSuccess: () => { invalidateRecipe(); setModal(null); } });
+    if (editing) {
+      updateRecipe.mutate(
+        { recipeId: editing.id, data: d },
+        {
+          onSuccess: () => {
+            invalidateRecipe();
+            setModal(null);
+            setEditing(undefined);
+          },
+        }
+      );
+    } else {
+      createRecipe.mutate(
+        { data: d },
+        {
+          onSuccess: () => {
+            invalidateRecipe();
+            setModal(null);
+          },
+        }
+      );
+    }
   };
-  const saveLog = (d: { lotId: number; recipeId: number; quantityKg: number; feedingDate: string }) => createLog.mutate({ data: d }, { onSuccess: () => { refresh(getGetFeedLogsQueryKey(), getGetFeedingSummaryQueryKey(), getGetFeedRecipesQueryKey(), getGetProductsQueryKey(), getGetMovementsQueryKey(), getGetDashboardQueryKey()); setModal(null); } });
-  const removeRecipe = (r: FeedRecipe) => { if (window.confirm(`Excluir a receita “${r.name}”?`)) deleteRecipe.mutate({ recipeId: r.id }, { onSuccess: invalidateRecipe }); };
-  const removeLog = (l: FeedLog) => { if (window.confirm(`Excluir o consumo de ${l.quantityKg} kg?`)) deleteLog.mutate({ logId: l.id }, { onSuccess: () => refresh(getGetFeedLogsQueryKey(), getGetFeedingSummaryQueryKey(), getGetFeedRecipesQueryKey(), getGetProductsQueryKey(), getGetMovementsQueryKey(), getGetDashboardQueryKey()) }); };
 
-  return <div className="screen-panel">
-    <div className="screen-header">
-      <div>
-        <span className="screen-kicker"><Wheat size={22} /> TELA 4 · RAÇÃO E TRATO</span>
-        <h1>Alimentação Diária</h1>
-      </div>
-      <div className="screen-header-actions">
-        <div className="big-stat-badge">
-          <span>HOJE</span>
-          <b>{(summary.data?.todayQuantityKg ?? 0).toLocaleString('pt-BR')} kg</b>
-        </div>
-        <div className="big-stat-badge highlight">
-          <span>CUSTO MÊS</span>
-          <b>{summary.data?.monthCost == null ? '—' : cash(summary.data.monthCost)}</b>
-        </div>
-        <button className="button secondary giant-btn" onClick={() => setModal('log')} data-testid="button-new-feed-log">
-          <Wheat size={24} /> Servir Ração
-        </button>
-        <button className="button primary giant-btn" onClick={() => { setEditing(undefined); setModal('recipe'); }} data-testid="button-new-recipe">
-          <Plus size={24} /> Nova Receita
-        </button>
-      </div>
-    </div>
+  const saveLog = (
+    d: { lotId: number; recipeId: number; quantityKg: number; feedingDate: string },
+    onError: (msg: string) => void
+  ) => {
+    createLog.mutate(
+      { data: d },
+      {
+        onSuccess: () => {
+          refresh(
+            getGetFeedLogsQueryKey(),
+            getGetFeedingSummaryQueryKey(),
+            getGetFeedRecipesQueryKey(),
+            getGetProductsQueryKey(),
+            getGetMovementsQueryKey(),
+            getGetDashboardQueryKey()
+          );
+          setModal(null);
+        },
+        onError: (err: any) => {
+          const msg =
+            err?.response?.data?.error ||
+            err?.message ||
+            'Erro ao registrar trato e dar baixa no estoque.';
+          onError(msg);
+        },
+      }
+    );
+  };
 
-    <div className="subview-bar">
-      <div className="segmented-giant">
-        <button type="button" className={subView === 'recipes' ? 'selected' : ''} onClick={() => { setSubView('recipes'); setPage(0); }}>
-          Receitas de Ração ({recipes.length})
-        </button>
-        <button type="button" className={subView === 'logs' ? 'selected' : ''} onClick={() => { setSubView('logs'); setPage(0); }}>
-          Consumo Diário ({logs.length})
-        </button>
-      </div>
-      {subView === 'recipes' && totalRecipePages > 1 && (
-        <div className="pager-controls">
-          <button type="button" className="pager-btn" disabled={safeRecipePage <= 0} onClick={() => setPage(p => Math.max(0, p - 1))}><ChevronLeft size={26} /></button>
-          <span>{safeRecipePage + 1} / {totalRecipePages}</span>
-          <button type="button" className="pager-btn" disabled={safeRecipePage >= totalRecipePages - 1} onClick={() => setPage(p => Math.min(totalRecipePages - 1, p + 1))}><ChevronRight size={26} /></button>
-        </div>
-      )}
-      {subView === 'logs' && totalLogPages > 1 && (
-        <div className="pager-controls">
-          <button type="button" className="pager-btn" disabled={safeLogPage <= 0} onClick={() => setPage(p => Math.max(0, p - 1))}><ChevronLeft size={26} /></button>
-          <span>{safeLogPage + 1} / {totalLogPages}</span>
-          <button type="button" className="pager-btn" disabled={safeLogPage >= totalLogPages - 1} onClick={() => setPage(p => Math.min(totalLogPages - 1, p + 1))}><ChevronRight size={26} /></button>
-        </div>
-      )}
-    </div>
+  const removeRecipe = (r: FeedRecipe) => {
+    if (window.confirm(`Excluir a receita “${r.name}”?`)) {
+      deleteRecipe.mutate({ recipeId: r.id }, { onSuccess: invalidateRecipe });
+    }
+  };
 
-    <div className="screen-body">
-      {subView === 'recipes' ? (
-        visibleRecipes.length === 0 ? <div className="giant-empty"><p>Nenhuma receita cadastrada.</p><button className="button primary giant-btn" onClick={() => setModal('recipe')}><Plus size={26} /> Criar 1ª Receita</button></div> :
-        <div className="giant-cards-grid two-cols">
-          {visibleRecipes.map(r => (
-            <article className="giant-lot-card" key={r.id} data-testid={`card-recipe-${r.id}`}>
-              <div className="giant-lot-top">
-                <span className="giant-icon-box amber"><Wheat size={30} /></span>
-                <div className="giant-lot-info">
-                  <b>{r.name}</b>
-                  <span>{r.batchWeightKg.toLocaleString('pt-BR')} kg por batida · {r.costPerKg !== null ? `${cash(r.costPerKg)}/kg` : 'Sem custo'}</span>
+  const removeLog = (l: FeedLog) => {
+    if (window.confirm(`Excluir o consumo de ${l.quantityKg} kg? O estoque será devolvido automaticamente.`)) {
+      deleteLog.mutate(
+        { logId: l.id },
+        {
+          onSuccess: () =>
+            refresh(
+              getGetFeedLogsQueryKey(),
+              getGetFeedingSummaryQueryKey(),
+              getGetFeedRecipesQueryKey(),
+              getGetProductsQueryKey(),
+              getGetMovementsQueryKey(),
+              getGetDashboardQueryKey()
+            ),
+        }
+      );
+    }
+  };
+
+  return (
+    <div className="screen-panel">
+      <div className="screen-header">
+        <div>
+          <span className="screen-kicker"><Wheat size={22} /> TELA 4 · RAÇÃO E TRATO</span>
+          <h1>Alimentação Diária</h1>
+        </div>
+        <div className="screen-header-actions">
+          <div className="big-stat-badge">
+            <span>HOJE</span>
+            <b>{(summary.data?.todayQuantityKg ?? 0).toLocaleString('pt-BR')} kg</b>
+          </div>
+          <div className="big-stat-badge highlight">
+            <span>CUSTO MÊS</span>
+            <b>{summary.data?.monthCost == null ? '—' : cash(summary.data.monthCost)}</b>
+          </div>
+          <button
+            className="button primary giant-btn"
+            onClick={() => setModal('add-stock')}
+            data-testid="button-quick-add-feed"
+          >
+            <Plus size={24} /> Adicionar Ração
+          </button>
+          <button
+            className="button secondary giant-btn"
+            onClick={() => setModal('log')}
+            data-testid="button-new-feed-log"
+          >
+            <Wheat size={24} /> Servir Ração
+          </button>
+          <button
+            className="button secondary giant-btn"
+            onClick={() => {
+              setEditing(undefined);
+              setModal('recipe');
+            }}
+            data-testid="button-new-recipe"
+          >
+            <Pencil size={24} /> Nova Receita
+          </button>
+        </div>
+      </div>
+
+      <div className="subview-bar">
+        <div className="segmented-giant">
+          <button
+            type="button"
+            className={subView === 'recipes' ? 'selected' : ''}
+            onClick={() => {
+              setSubView('recipes');
+              setPage(0);
+            }}
+          >
+            Receitas de Ração ({recipes.length})
+          </button>
+          <button
+            type="button"
+            className={subView === 'logs' ? 'selected' : ''}
+            onClick={() => {
+              setSubView('logs');
+              setPage(0);
+            }}
+          >
+            Consumo Diário ({logs.length})
+          </button>
+        </div>
+        {subView === 'recipes' && totalRecipePages > 1 && (
+          <div className="pager-controls">
+            <button
+              type="button"
+              className="pager-btn"
+              disabled={safeRecipePage <= 0}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+            >
+              <ChevronLeft size={26} />
+            </button>
+            <span>
+              {safeRecipePage + 1} / {totalRecipePages}
+            </span>
+            <button
+              type="button"
+              className="pager-btn"
+              disabled={safeRecipePage >= totalRecipePages - 1}
+              onClick={() => setPage((p) => Math.min(totalRecipePages - 1, p + 1))}
+            >
+              <ChevronRight size={26} />
+            </button>
+          </div>
+        )}
+        {subView === 'logs' && totalLogPages > 1 && (
+          <div className="pager-controls">
+            <button
+              type="button"
+              className="pager-btn"
+              disabled={safeLogPage <= 0}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+            >
+              <ChevronLeft size={26} />
+            </button>
+            <span>
+              {safeLogPage + 1} / {totalLogPages}
+            </span>
+            <button
+              type="button"
+              className="pager-btn"
+              disabled={safeLogPage >= totalLogPages - 1}
+              onClick={() => setPage((p) => Math.min(totalLogPages - 1, p + 1))}
+            >
+              <ChevronRight size={26} />
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="screen-body">
+        {subView === 'recipes' ? (
+          visibleRecipes.length === 0 ? (
+            <div className="giant-empty">
+              <p>Nenhuma ração ou receita cadastrada ainda.</p>
+              <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginTop: 12 }}>
+                <button
+                  className="button primary giant-btn"
+                  onClick={() => setModal('add-stock')}
+                >
+                  <Plus size={24} /> + Adicionar Ração ao Estoque
+                </button>
+                <button
+                  className="button secondary giant-btn"
+                  onClick={() => setModal('recipe')}
+                >
+                  <Pencil size={24} /> Criar Receita Personalizada
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="giant-cards-grid two-cols">
+              {visibleRecipes.map((r) => (
+                <article className="giant-lot-card" key={r.id} data-testid={`card-recipe-${r.id}`}>
+                  <div className="giant-lot-top">
+                    <span className="giant-icon-box amber">
+                      <Wheat size={30} />
+                    </span>
+                    <div className="giant-lot-info">
+                      <b>{r.name}</b>
+                      <span>
+                        {r.batchWeightKg.toLocaleString('pt-BR')} kg por batida ·{' '}
+                        {r.costPerKg !== null ? `${cash(r.costPerKg)}/kg` : 'Sem custo'}
+                      </span>
+                    </div>
+                    <div className="giant-lot-actions-inline">
+                      <button
+                        className="icon-button giant-icon-btn"
+                        aria-label={`Editar ${r.name}`}
+                        onClick={() => {
+                          setEditing(r);
+                          setModal('recipe');
+                        }}
+                        data-testid={`button-edit-recipe-${r.id}`}
+                      >
+                        <Pencil size={24} />
+                      </button>
+                      <button
+                        className="icon-button giant-icon-btn danger-icon"
+                        aria-label={`Excluir ${r.name}`}
+                        onClick={() => removeRecipe(r)}
+                        disabled={deleteRecipe.isPending}
+                        data-testid={`button-delete-recipe-${r.id}`}
+                      >
+                        <Trash2 size={24} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="giant-ingredients-wrap">
+                    {r.ingredients.map((i) => (
+                      <span key={i.productId} className="giant-ing-pill">
+                        {i.productName}: <b>{i.quantityKg} kg</b>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="giant-recipe-foot">
+                    <Coins size={22} />
+                    <b>
+                      {r.costPerBatch === null
+                        ? 'Informe o preço nos produtos'
+                        : `Custo da batida: ${cash(r.costPerBatch)}`}
+                    </b>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )
+        ) : visibleLogs.length === 0 ? (
+          <div className="giant-empty">
+            <p>Nenhum trato registrado.</p>
+            <button className="button primary giant-btn" onClick={() => setModal('log')}>
+              <Wheat size={26} /> Servir Ração Agora
+            </button>
+          </div>
+        ) : (
+          <div className="giant-list">
+            {visibleLogs.map((log) => (
+              <article className="giant-list-row" key={log.id} data-testid={`row-feed-log-${log.id}`}>
+                <span className="giant-dir-badge in">
+                  <Wheat size={26} />
+                </span>
+                <div className="giant-row-main">
+                  <b>{log.lotLabel}</b>
+                  <span>
+                    {log.recipeName} · {shortDate(log.feedingDate)}
+                  </span>
                 </div>
-                <div className="giant-lot-actions-inline">
-                  <button className="icon-button giant-icon-btn" aria-label={`Editar ${r.name}`} onClick={() => { setEditing(r); setModal('recipe'); }} data-testid={`button-edit-recipe-${r.id}`}><Pencil size={24} /></button>
-                  <button className="icon-button giant-icon-btn danger-icon" aria-label={`Excluir ${r.name}`} onClick={() => removeRecipe(r)} disabled={deleteRecipe.isPending} data-testid={`button-delete-recipe-${r.id}`}><Trash2 size={24} /></button>
+                <div className="giant-row-right">
+                  <strong>{log.quantityKg.toLocaleString('pt-BR')} kg</strong>
+                  <small>{log.totalCost === null ? '—' : cash(log.totalCost)}</small>
                 </div>
-              </div>
-              <div className="giant-ingredients-wrap">
-                {r.ingredients.map(i => <span key={i.productId} className="giant-ing-pill">{i.productName}: <b>{i.quantityKg} kg</b></span>)}
-              </div>
-              <div className="giant-recipe-foot">
-                <Coins size={22} />
-                <b>{r.costPerBatch === null ? 'Informe o preço nos produtos' : `Custo da batida: ${cash(r.costPerBatch)}`}</b>
-              </div>
-            </article>
-          ))}
-        </div>
-      ) : (
-        visibleLogs.length === 0 ? <div className="giant-empty"><p>Nenhum trato registrado.</p><button className="button primary giant-btn" onClick={() => setModal('log')}><Wheat size={26} /> Registrar Consumo</button></div> :
-        <div className="giant-list">
-          {visibleLogs.map(log => (
-            <article className="giant-list-row" key={log.id} data-testid={`row-feed-log-${log.id}`}>
-              <span className="giant-dir-badge in"><Wheat size={26} /></span>
-              <div className="giant-row-main">
-                <b>{log.lotLabel}</b>
-                <span>{log.recipeName} · {shortDate(log.feedingDate)}</span>
-              </div>
-              <div className="giant-row-right">
-                <strong>{log.quantityKg.toLocaleString('pt-BR')} kg</strong>
-                <small>{log.totalCost === null ? '—' : cash(log.totalCost)}</small>
-              </div>
-              <button className="icon-button giant-icon-btn danger-icon" aria-label="Excluir consumo" onClick={() => removeLog(log)} disabled={deleteLog.isPending} data-testid={`button-delete-feed-log-${log.id}`}>
-                <Trash2 size={24} />
-              </button>
-            </article>
-          ))}
-        </div>
+                <button
+                  className="icon-button giant-icon-btn danger-icon"
+                  aria-label="Excluir consumo"
+                  onClick={() => removeLog(log)}
+                  disabled={deleteLog.isPending}
+                  data-testid={`button-delete-feed-log-${log.id}`}
+                >
+                  <Trash2 size={24} />
+                </button>
+              </article>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {modal === 'add-stock' && (
+        <FormModal
+          title="Adicionar Ração ao Estoque"
+          eyebrow="RAÇÃO · ENTRADA"
+          close={() => setModal(null)}
+        >
+          <QuickAddFeedForm
+            busy={false}
+            close={() => setModal(null)}
+          />
+        </FormModal>
+      )}
+
+      {modal === 'recipe' && (
+        <FormModal
+          title={editing ? 'Editar Receita' : 'Nova Receita de Ração'}
+          eyebrow="RAÇÃO · FÓRMULA"
+          close={() => {
+            setModal(null);
+            setEditing(undefined);
+          }}
+        >
+          <RecipeForm
+            key={editing?.id ?? 'new'}
+            initial={editing}
+            products={feedProducts}
+            busy={createRecipe.isPending || updateRecipe.isPending}
+            close={() => {
+              setModal(null);
+              setEditing(undefined);
+            }}
+            save={saveRecipe}
+            openAddFeed={() => setModal('add-stock')}
+          />
+        </FormModal>
+      )}
+
+      {modal === 'log' && (
+        <FormModal
+          title="Servir Ração ao Lote"
+          eyebrow="RAÇÃO · TRATO E BAIXA"
+          close={() => setModal(null)}
+        >
+          <FeedLogForm
+            lots={(lotsQuery.data ?? []).filter((l) => l.currentCount > 0)}
+            recipes={recipes}
+            feedProducts={feedProducts}
+            busy={createLog.isPending}
+            close={() => setModal(null)}
+            save={saveLog}
+            openAddFeed={() => setModal('add-stock')}
+            openNewLot={() => {
+              setModal(null);
+              window.location.hash = '#/aves';
+            }}
+          />
+        </FormModal>
       )}
     </div>
-
-    {modal === 'recipe' && <FormModal title={editing ? 'Editar Receita' : 'Nova Receita de Ração'} eyebrow="RAÇÃO · FÓRMULA" close={() => { setModal(null); setEditing(undefined); }}><RecipeForm key={editing?.id ?? 'new'} initial={editing} products={(productsQuery.data ?? []).filter(p => p.category === 'feed' && p.unit.toLowerCase() === 'kg')} busy={createRecipe.isPending || updateRecipe.isPending} close={() => { setModal(null); setEditing(undefined); }} save={saveRecipe} /></FormModal>}
-    {modal === 'log' && <FormModal title="Servir Ração ao Lote" eyebrow="RAÇÃO · CONSUMO" close={() => setModal(null)}><FeedLogForm lots={(lotsQuery.data ?? []).filter(l => l.currentCount > 0)} recipes={recipes} busy={createLog.isPending} close={() => setModal(null)} save={saveLog} /></FormModal>}
-  </div>;
+  );
 }
