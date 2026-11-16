@@ -57557,6 +57557,7 @@ app.use((0, import_cors.default)());
 app.use(import_express7.default.json({ limit: "10mb" }));
 app.use(import_express7.default.urlencoded({ extended: true }));
 app.use("/api", routes_default);
+app.use(routes_default);
 if (!process.env.VERCEL && process.env.NODE_ENV === "production") {
   const staticDir = path.resolve(
     process.cwd(),

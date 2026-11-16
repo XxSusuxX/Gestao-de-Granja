@@ -11,6 +11,7 @@ app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
+app.use(router);
 
 // In standalone production mode (non-Vercel), also serve built frontend static assets if present
 if (!process.env.VERCEL && process.env.NODE_ENV === "production") {
