@@ -23,11 +23,15 @@
 html,
 body,
 #root {
+  height: 100%;
   height: 100dvh;
   width: 100vw;
   margin: 0;
   padding: 0;
   overflow: hidden;
+  position: fixed;
+  inset: 0;
+  overscroll-behavior: none;
   font-family: var(--app-font-sans);
   background: #f3efe3;
   color: #183024;
@@ -142,24 +146,29 @@ body,
    MAIN SWIPE SHELL (100dvh, NO VERTICAL SCROLL, HORIZONTAL FINGER SWIPE)
    ========================================================================== */
 .swipe-app-shell {
+  height: 100%;
   height: 100dvh;
   width: 100vw;
   overflow: hidden;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
   background: #f3efe3;
 }
 
 .giant-topbar {
-  height: clamp(68px, 9vh, 84px);
+  flex: none;
+  height: clamp(60px, 8.5vh, 80px);
   background: #1d392b;
   color: #fdf9ee;
-  padding: 0 clamp(16px, 3vw, 36px);
+  padding: 0 clamp(14px, 2.8vw, 36px);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   border-bottom: 3px solid #2e5441;
+  z-index: 40;
 }
 
 .topbar-brand {
@@ -1075,13 +1084,15 @@ body,
    GIANT BOTTOM TABS (SWIPE BAR)
    ========================================================================== */
 .giant-bottom-tabs {
-  height: clamp(74px, 10vh, 92px);
+  flex: none;
+  height: clamp(66px, 9.5vh, 88px);
   background: #fffdf8;
   border-top: 3px solid #d4dac9;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  padding: 6px clamp(8px, 2vw, 28px);
-  gap: 8px;
+  padding: 4px clamp(6px, 1.8vw, 24px);
+  gap: 6px;
+  z-index: 40;
 }
 
 .giant-tab-btn {
@@ -1445,7 +1456,7 @@ body,
 }
 
 /* ==========================================================================
-   RESPONSIVE COMPACTNESS FOR MOBILE SCREENS (ZERO SCROLL)
+   RESPONSIVE COMPACTNESS & POLISH FOR TABLET & MOBILE SCREENS
    ========================================================================== */
 @media (max-width: 960px) {
   .giant-kpi-grid {
@@ -1460,46 +1471,424 @@ body,
 }
 
 @media (max-width: 680px) {
+  /* Topbar fixed compact sizing */
   .giant-topbar {
-    height: 62px;
+    height: 56px;
     padding: 0 12px;
+    gap: 8px;
+  }
+  .topbar-brand {
+    gap: 8px;
   }
   .topbar-logo {
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
   }
-  .swipe-hint-text {
-    font-size: 15px;
+  .topbar-logo svg {
+    width: 22px;
+    height: 22px;
+  }
+  .topbar-brand strong,
+  .topbar-client-name {
+    font-size: 18px !important;
+    line-height: 1.15;
+  }
+  .logout-btn {
+    height: 36px;
+    padding: 0 10px;
+    font-size: 13px;
+    gap: 4px;
+    border-radius: 10px;
   }
   .logout-btn span {
     display: none;
   }
-  .logout-btn {
-    padding: 0 12px;
+
+  /* Bottom tabs compact sizing */
+  .giant-bottom-tabs {
+    height: 60px;
+    padding: 3px 6px;
+    gap: 4px;
   }
-  .giant-quick-actions {
-    grid-template-columns: 1fr;
+  .giant-tab-btn {
+    font-size: 12px !important;
+    gap: 2px;
+    border-radius: 12px;
+    padding: 2px 4px;
+  }
+  .giant-tab-btn svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  /* Slide and screen panel layout */
+  .swipe-slide {
+    padding: 8px 10px 10px;
+    overflow: hidden;
+  }
+  .screen-panel {
+    gap: 8px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+    padding-bottom: 12px;
+  }
+
+  /* Screen Header & Titles */
+  .screen-header {
+    flex-direction: column;
+    align-items: stretch;
     gap: 8px;
   }
-  .giant-quick-btn {
-    min-height: 68px;
-    padding: 10px 16px;
+  .screen-kicker {
+    font-size: 12px !important;
+    gap: 4px;
   }
-  .giant-list-row {
+  .screen-header h1 {
+    font-size: 21px !important;
+    line-height: 1.15;
+    margin: 2px 0 0;
+  }
+  .screen-header-actions {
+    width: 100%;
+    display: flex;
     flex-wrap: wrap;
-    padding: 10px 14px;
-    gap: 10px;
+    gap: 6px;
   }
-  .giant-dir-badge {
-    width: 44px;
-    height: 44px;
+  .screen-header-actions .button.giant-btn,
+  .screen-header-actions .photo-btn {
+    flex: 1 1 calc(50% - 3px);
+    height: 40px;
+    min-height: 40px;
+    font-size: 14px;
+    padding: 0 10px;
+    border-radius: 12px;
+  }
+  .screen-header-actions .button.giant-btn:only-child {
+    flex: 1 1 100%;
+  }
+
+  /* Stat Badges in header (Finance / Feeding) */
+  .big-stat-badge {
+    flex: 1 1 calc(50% - 4px);
+    min-width: 110px;
+    padding: 6px 10px;
+    border-radius: 12px;
+  }
+  .big-stat-badge span {
+    font-size: 11px !important;
+  }
+  .big-stat-badge b {
+    font-size: 17px !important;
+    line-height: 1.1;
+  }
+
+  /* Subview bar (Tabs & Pager) */
+  .subview-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    width: 100%;
+  }
+  .segmented-giant {
+    width: 100%;
+    display: flex;
+    padding: 3px;
+    border-radius: 12px;
+    gap: 4px;
+  }
+  .segmented-giant button {
+    flex: 1;
+    min-height: 36px;
+    height: 36px;
+    font-size: 13px;
+    padding: 0 6px;
+    border-radius: 8px;
+    white-space: nowrap;
+    text-align: center;
+  }
+  .filter-pills-giant {
+    width: 100%;
+    display: flex;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    flex-wrap: nowrap;
+    gap: 6px;
+    scrollbar-width: none;
+  }
+  .giant-filter-pill {
+    min-height: 36px;
+    height: 36px;
+    font-size: 13px;
+    padding: 0 12px;
+    white-space: nowrap;
+    flex: none;
+  }
+  .pager-controls {
+    align-self: center;
+    height: 34px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    gap: 6px;
+  }
+  .pager-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+  }
+  .pager-controls span {
+    font-size: 13px;
+    min-width: 44px;
+  }
+
+  /* Screen Body & Giant List */
+  .screen-body {
+    flex: 1;
+    min-height: min-content;
+    overflow: visible;
+  }
+  .giant-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+    min-height: min-content;
+  }
+
+  /* CRITICAL: List Rows NEVER overlap on mobile! */
+  .giant-list-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    gap: 6px 8px;
+    border-radius: 16px;
+    border-width: 2px;
+    flex: none !important;
+    min-height: fit-content !important;
+    height: auto !important;
+    position: relative;
+    box-shadow: 0 2px 6px rgba(24, 48, 36, 0.04);
+  }
+  .giant-dir-badge,
+  .product-row-thumb {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    flex: none;
+  }
+  .giant-row-main {
+    flex: 1 1 120px;
+    min-width: 0;
+    padding: 0 4px;
+  }
+  .giant-row-main b {
+    font-size: 15px !important;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .giant-row-main span {
+    font-size: 12px !important;
+    line-height: 1.2;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .giant-row-right {
+    flex: none;
+    text-align: right;
+    margin-left: auto;
+  }
+  .giant-row-right strong,
+  .giant-row-val {
+    font-size: 16px !important;
+    line-height: 1.2;
+  }
+  .giant-row-right small {
+    font-size: 11px !important;
+    margin-top: 1px;
   }
   .giant-row-actions {
     width: 100%;
+    flex: 1 1 100%;
+    display: flex;
+    align-items: center;
     justify-content: flex-end;
+    gap: 6px;
+    margin-top: 4px;
+    padding-top: 6px;
+    border-top: 1px solid #e7ede2;
+  }
+  .giant-quick-tag {
+    height: 34px;
+    padding: 0 10px;
+    font-size: 13px;
+    border-radius: 8px;
+  }
+  .giant-settle-btn {
+    min-height: 34px !important;
+    height: 34px !important;
+    padding: 0 10px !important;
+    font-size: 13px !important;
+    border-radius: 8px !important;
+  }
+  .icon-button,
+  .giant-icon-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+  }
+  .icon-button svg,
+  .giant-icon-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* Lot Cards (Aves e Ração) */
+  .giant-cards-grid.two-cols {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .giant-lot-card {
+    padding: 10px 12px;
+    border-radius: 16px;
+    border-width: 2px;
+    gap: 8px;
+    flex: none;
+  }
+  .giant-icon-box {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+  }
+  .giant-lot-info b {
+    font-size: 16px;
+  }
+  .giant-lot-info span {
+    font-size: 12px;
+    margin-top: 2px;
+  }
+  .giant-lot-count strong {
+    font-size: 20px;
+  }
+  .giant-lot-count small {
+    font-size: 11px;
+  }
+  .giant-action-btn {
+    height: 36px;
+    font-size: 13px;
+    border-radius: 8px;
+  }
+  .giant-ing-pill {
+    padding: 3px 8px;
+    font-size: 12px;
+    border-radius: 8px;
+  }
+
+  /* Dashboard Screen (Início) */
+  .dashboard-one-screen {
+    gap: 8px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .giant-quick-actions {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .giant-quick-btn {
+    min-height: 54px;
+    padding: 8px 12px;
+    border-radius: 14px;
+    gap: 10px;
+  }
+  .giant-quick-btn svg {
+    width: 26px;
+    height: 26px;
+  }
+  .giant-quick-btn b {
+    font-size: 16px;
+  }
+  .giant-quick-btn span {
+    font-size: 12px;
+    margin-top: 1px;
+  }
+  .giant-kpi-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .giant-kpi-card {
+    padding: 10px 12px;
+    border-radius: 14px;
+    border-width: 2px;
+    gap: 4px;
+  }
+  .kpi-top {
+    font-size: 12px;
+    gap: 6px;
+  }
+  .kpi-top svg {
+    width: 18px;
+    height: 18px;
+  }
+  .giant-kpi-card strong {
+    font-size: 20px !important;
+  }
+  .giant-kpi-card small {
+    font-size: 12px !important;
+  }
+  .giant-alert-banner {
+    padding: 8px 12px;
+    border-radius: 12px;
+    gap: 8px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .alert-banner-left b {
+    font-size: 15px;
+  }
+  .alert-banner-left span {
+    font-size: 12px;
+  }
+
+  /* Modals on Mobile */
+  .modal {
+    padding: 14px;
+    border-radius: 20px;
+    width: 96vw;
+    max-height: 94dvh;
+  }
+  .modal-head h2 {
+    font-size: 22px;
+  }
+  .field-label {
+    font-size: 15px;
+    gap: 4px;
+  }
+  .field-label input,
+  .field-label select {
+    height: 48px;
+    font-size: 16px;
+    padding: 0 12px;
+    border-radius: 12px;
+  }
+  .choice-pill,
+  .suggestion-chip {
+    min-height: 36px;
+    height: 36px;
+    font-size: 13px;
+    padding: 0 10px;
+    border-radius: 10px;
   }
   .form-row,
   .product-choice-list {
     grid-template-columns: 1fr;
+    gap: 8px;
   }
 }
