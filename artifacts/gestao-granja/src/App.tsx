@@ -1,9 +1,9 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Check, ChevronLeft, ChevronRight,
-  CircleDollarSign, CreditCard, Database, Egg, Leaf, Lock, LogOut, Package,
-  Plus, Sprout, Trash2, TrendingDown, TrendingUp, UserCheck, UserPlus, Wallet, X, Pencil, AlertTriangle,
+  ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Camera, Check, ChevronLeft, ChevronRight,
+  CircleDollarSign, CreditCard, Database, Egg, ImagePlus, Leaf, Lock, LogOut, Package,
+  Plus, Sparkles, Sprout, Trash2, TrendingDown, TrendingUp, UserCheck, UserPlus, Wallet, X, Pencil, AlertTriangle,
   RotateCcw, Bird, Wheat, Hand,
 } from 'lucide-react';
 import { ErrorBoundary } from '@/components/error-boundary';
@@ -51,6 +51,181 @@ type SystemStatus = {
   error: string | null;
 };
 
+interface ImageAnalysisResult {
+  matchedInDb: boolean;
+  similarity: number;
+  matchedProduct: Product | null;
+  suggestion: {
+    name: string;
+    category: Product['category'];
+    unit: string;
+    quantity: number;
+    minimumQuantity: number | null;
+    unitCost: number | null;
+    reason: string;
+  };
+}
+
+interface PreparedImageData {
+  imageData: string;
+  imageSignature: string;
+  fileName: string;
+}
+
+async function extractImageFeatures(file: File): Promise<PreparedImageData> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ''));
+    reader.onerror = () => reject(new Error('Falha ao ler imagem'));
+    reader.readAsDataURL(file);
+  });
+
+  return new Promise<PreparedImageData>((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        // 1. Create compact 140x140 thumbnail for fast database storage & display
+        const thumbCanvas = document.createElement('canvas');
+        const thumbSize = 140;
+        thumbCanvas.width = thumbSize;
+        thumbCanvas.height = thumbSize;
+        const tCtx = thumbCanvas.getContext('2d');
+        let compactDataUrl = dataUrl;
+        if (tCtx) {
+          tCtx.fillStyle = '#ffffff';
+          tCtx.fillRect(0, 0, thumbSize, thumbSize);
+          const scale = Math.max(thumbSize / img.width, thumbSize / img.height);
+          const w = img.width * scale;
+          const h = img.height * scale;
+          tCtx.drawImage(img, (thumbSize - w) / 2, (thumbSize - h) / 2, w, h);
+          compactDataUrl = thumbCanvas.toDataURL('image/jpeg', 0.78);
+        }
+
+        // 2. Compute 4x4 spatial RGB signature (48 values) + global RGB + contrast stdDev
+        const sigCanvas = document.createElement('canvas');
+        const gridSize = 32;
+        sigCanvas.width = gridSize;
+        sigCanvas.height = gridSize;
+        const sCtx = sigCanvas.getContext('2d');
+        if (sCtx) {
+          sCtx.drawImage(img, 0, 0, gridSize, gridSize);
+          const pixels = sCtx.getImageData(0, 0, gridSize, gridSize).data;
+          const block = 8; // 4x4 blocks of 8x8 pixels
+          const vector: number[] = [];
+          let totalR = 0;
+          let totalG = 0;
+          let totalB = 0;
+          const lums: number[] = [];
+
+          for (let by = 0; by < 4; by++) {
+            for (let bx = 0; bx < 4; bx++) {
+              let br = 0;
+              let bg = 0;
+              let bb = 0;
+              let count = 0;
+              for (let y = by * block; y < (by + 1) * block; y++) {
+                for (let x = bx * block; x < (bx + 1) * block; x++) {
+                  const idx = (y * gridSize + x) * 4;
+                  const r = pixels[idx];
+                  const g = pixels[idx + 1];
+                  const b = pixels[idx + 2];
+                  br += r;
+                  bg += g;
+                  bb += b;
+                  totalR += r;
+                  totalG += g;
+                  totalB += b;
+                  lums.push(0.299 * r + 0.587 * g + 0.114 * b);
+                  count++;
+                }
+              }
+              vector.push(
+                Math.round(br / count),
+                Math.round(bg / count),
+                Math.round(bb / count),
+              );
+            }
+          }
+
+          const totalPixels = gridSize * gridSize;
+          const avgR = Math.round(totalR / totalPixels);
+          const avgG = Math.round(totalG / totalPixels);
+          const avgB = Math.round(totalB / totalPixels);
+          const meanLum = lums.reduce((a, b) => a + b, 0) / lums.length;
+          const variance =
+            lums.reduce((acc, l) => acc + (l - meanLum) ** 2, 0) / lums.length;
+          const std = Math.round(Math.sqrt(variance));
+
+          resolve({
+            imageData: compactDataUrl,
+            imageSignature: JSON.stringify({
+              v: vector,
+              rgb: [avgR, avgG, avgB],
+              std,
+              fn: file.name,
+            }),
+            fileName: file.name,
+          });
+          return;
+        }
+      } catch {
+        // Fallback below
+      }
+
+      const fallbackVec = Array.from({ length: 48 }, (_, i) =>
+        dataUrl.charCodeAt((i * 13) % dataUrl.length) % 255,
+      );
+      resolve({
+        imageData: dataUrl,
+        imageSignature: JSON.stringify({
+          v: fallbackVec,
+          rgb: [170, 145, 95],
+          std: 42,
+          fn: file.name,
+        }),
+        fileName: file.name,
+      });
+    };
+    img.onerror = () => {
+      const fallbackVec = Array.from({ length: 48 }, (_, i) =>
+        dataUrl.charCodeAt((i * 13) % Math.max(1, dataUrl.length)) % 255,
+      );
+      resolve({
+        imageData: dataUrl,
+        imageSignature: JSON.stringify({
+          v: fallbackVec,
+          rgb: [170, 145, 95],
+          std: 42,
+          fn: file.name,
+        }),
+        fileName: file.name,
+      });
+    };
+    img.src = dataUrl;
+  });
+}
+
+async function analyzeProductImageOnServer(
+  prepared: PreparedImageData,
+): Promise<ImageAnalysisResult> {
+  const token = localStorage.getItem(AUTH_STORAGE_KEY);
+  const res = await fetch('/api/inventory/analyze-image', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({
+      imageSignature: prepared.imageSignature,
+      fileName: prepared.fileName,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error('Falha ao analisar imagem');
+  }
+  return res.json() as Promise<ImageAnalysisResult>;
+}
+
 const categoryNames: Record<string, string> = {
   feed: 'Alimentação', medicine: 'Remédios', supplies: 'Insumos',
   equipment: 'Equipamentos', other: 'Outros',
@@ -86,7 +261,7 @@ function useSystemStatus() {
 function Modal({ title, eyebrow, children, onClose }: { title: string; eyebrow: string; children: ReactNode; onClose: () => void }) {
   return <div className="modal-backdrop" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
     <section className="modal" role="dialog" aria-modal="true" aria-label={title}>
-      <div className="modal-head"><div><div className="eyebrow">{eyebrow}</div><h2>{title}</h2></div><button className="icon-button" aria-label="Fechar" onClick={onClose}><X size={32} /></button></div>
+      <div className="modal-head"><div><div className="eyebrow">{eyebrow}</div><h2>{title}</h2></div><button className="icon-button" aria-label="Fechar" onClick={onClose}><X size={30} /></button></div>
       {children}
     </section>
   </div>;
@@ -232,39 +407,311 @@ function LoginScreen({ onAuthenticated }: { onAuthenticated: (user: AuthUser, to
   );
 }
 
-function ProductForm({ initial, onSave, busy, onClose }: { initial?: Product; onSave: (data: { name: string; category: Product['category']; unit: string; quantity: number; minimumQuantity: number | null; unitCost: number | null }) => void; busy: boolean; onClose: () => void }) {
-  const [name, setName] = useState(initial?.name ?? '');
-  const [category, setCategory] = useState<Product['category']>(initial?.category ?? 'feed');
-  const [unit, setUnit] = useState(initial?.unit ?? 'kg');
-  const [quantity, setQuantity] = useState(initial?.quantity.toString() ?? '');
-  const [minimum, setMinimum] = useState(initial?.minimumQuantity?.toString() ?? '');
-  const [unitCost, setUnitCost] = useState(initial?.unitCost?.toString() ?? '');
+function ProductForm({
+  initial,
+  initialPhotoData,
+  initialAnalysis,
+  onSave,
+  busy,
+  onClose,
+}: {
+  initial?: Product;
+  initialPhotoData?: PreparedImageData | null;
+  initialAnalysis?: ImageAnalysisResult | null;
+  onSave: (data: {
+    name: string;
+    category: Product['category'];
+    unit: string;
+    quantity: number;
+    minimumQuantity: number | null;
+    unitCost: number | null;
+    imageData?: string | null;
+    imageSignature?: string | null;
+  }) => void;
+  busy: boolean;
+  onClose: () => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [name, setName] = useState(
+    initial?.name ?? initialAnalysis?.suggestion.name ?? '',
+  );
+  const [category, setCategory] = useState<Product['category']>(
+    initial?.category ?? initialAnalysis?.suggestion.category ?? 'feed',
+  );
+  const [unit, setUnit] = useState(
+    initial?.unit ?? initialAnalysis?.suggestion.unit ?? 'kg',
+  );
+  const [quantity, setQuantity] = useState(
+    initial?.quantity.toString() ??
+      (initialAnalysis ? String(initialAnalysis.suggestion.quantity) : ''),
+  );
+  const [minimum, setMinimum] = useState(
+    initial?.minimumQuantity?.toString() ??
+      (initialAnalysis?.suggestion.minimumQuantity != null
+        ? String(initialAnalysis.suggestion.minimumQuantity)
+        : ''),
+  );
+  const [unitCost, setUnitCost] = useState(
+    initial?.unitCost?.toString() ??
+      (initialAnalysis?.suggestion.unitCost != null
+        ? String(initialAnalysis.suggestion.unitCost)
+        : ''),
+  );
+  const [imageData, setImageData] = useState<string | null>(
+    initialPhotoData?.imageData ?? initial?.imageData ?? null,
+  );
+  const [imageSignature, setImageSignature] = useState<string | null>(
+    initialPhotoData?.imageSignature ?? initial?.imageSignature ?? null,
+  );
+  const [analysisBanner, setAnalysisBanner] = useState<string | null>(
+    initialAnalysis?.suggestion.reason ?? null,
+  );
+  const [matchedInDb, setMatchedInDb] = useState<boolean>(
+    initialAnalysis?.matchedInDb ?? false,
+  );
+  const [analyzingImage, setAnalyzingImage] = useState(false);
+
   const categoryOptions: { key: Product['category']; label: string }[] = [
-    { key: 'feed', label: 'Alimentação' }, { key: 'medicine', label: 'Remédios' },
-    { key: 'supplies', label: 'Insumos' }, { key: 'equipment', label: 'Equipamentos' }, { key: 'other', label: 'Outros' },
+    { key: 'feed', label: 'Alimentação' },
+    { key: 'medicine', label: 'Remédios' },
+    { key: 'supplies', label: 'Insumos' },
+    { key: 'equipment', label: 'Equipamentos' },
+    { key: 'other', label: 'Outros' },
   ];
+
   const applySuggestion = (item: string) => {
     setName(item);
-    if (item.includes('Vacina')) { setCategory('medicine'); setUnit('un'); }
-    else { setCategory('feed'); setUnit('kg'); }
+    if (item.includes('Vacina')) {
+      setCategory('medicine');
+      setUnit('un');
+    } else {
+      setCategory('feed');
+      setUnit('kg');
+    }
   };
-  return <form className="modal-form" onSubmit={e => { e.preventDefault(); onSave({ name: name.trim(), category, unit, quantity: Number(quantity), minimumQuantity: minimum ? Number(minimum) : null, unitCost: unitCost ? Number(unitCost) : null }); }}>
-    <label className="field-label">Nome do produto<input autoFocus required value={name} onChange={e => setName(e.target.value)} placeholder="Ex.: Milho em Grão" data-testid="input-product-name" />
-      {!initial && <div className="suggestion-row">{quickProducts.map(item => <button type="button" key={item} onClick={() => applySuggestion(item)} className="suggestion-chip">{item}</button>)}</div>}
-    </label>
-    <div className="field-label">Tipo<div className="choice-grid">{categoryOptions.map(opt => <button type="button" key={opt.key} className={`choice-pill ${category === opt.key ? 'selected' : ''}`} onClick={() => setCategory(opt.key)}>{opt.label}</button>)}</div></div>
-    <div className="form-row">
-      <label className="field-label">{initial ? 'Saldo atual' : 'Quantidade'}<input required type="number" min="0" step="any" value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="0" disabled={!!initial} data-testid="input-product-quantity" />
-        {!initial && <div className="suggestion-row">{quickQuantities.map(q => <button type="button" key={q} onClick={() => setQuantity(String(q))} className="suggestion-chip">+{q}</button>)}</div>}
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAnalyzingImage(true);
+    try {
+      const prepared = await extractImageFeatures(file);
+      setImageData(prepared.imageData);
+      setImageSignature(prepared.imageSignature);
+
+      const analysis = await analyzeProductImageOnServer(prepared);
+      setName(analysis.suggestion.name);
+      setCategory(analysis.suggestion.category);
+      setUnit(analysis.suggestion.unit);
+      if (!initial && !quantity) {
+        setQuantity(String(analysis.suggestion.quantity));
+      }
+      if (analysis.suggestion.minimumQuantity != null) {
+        setMinimum(String(analysis.suggestion.minimumQuantity));
+      }
+      if (analysis.suggestion.unitCost != null) {
+        setUnitCost(String(analysis.suggestion.unitCost));
+      }
+      setMatchedInDb(analysis.matchedInDb);
+      setAnalysisBanner(analysis.suggestion.reason);
+    } catch {
+      setAnalysisBanner('Imagem carregada. Preencha ou confirme os campos abaixo.');
+    } finally {
+      setAnalyzingImage(false);
+      e.target.value = '';
+    }
+  };
+
+  return (
+    <form
+      className="modal-form compact-modal-form"
+      onSubmit={e => {
+        e.preventDefault();
+        onSave({
+          name: name.trim(),
+          category,
+          unit,
+          quantity: Number(quantity),
+          minimumQuantity: minimum ? Number(minimum) : null,
+          unitCost: unitCost ? Number(unitCost) : null,
+          imageData,
+          imageSignature,
+        });
+      }}
+    >
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="sr-only-input"
+        onChange={e => { void handleFileChange(e); }}
+        data-testid="input-product-image-file"
+      />
+
+      <div className="photo-picker-box">
+        {imageData ? (
+          <img
+            src={imageData}
+            alt="Prévia do produto"
+            className="photo-preview-thumb"
+            data-testid="img-product-preview"
+          />
+        ) : (
+          <div className="photo-placeholder">
+            <Camera size={32} />
+          </div>
+        )}
+        <div className="photo-picker-info">
+          <b>{imageData ? 'Imagem do produto pronta' : 'Identificador por Imagem'}</b>
+          <span>Abra a galeria (celular ou PC) para preencher tudo automático</span>
+        </div>
+        <button
+          type="button"
+          className="button secondary photo-upload-btn"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={analyzingImage}
+          data-testid="button-upload-product-image"
+        >
+          <ImagePlus size={24} />
+          {analyzingImage ? 'Analisando…' : imageData ? 'Trocar Imagem' : 'Adicionar Imagem'}
+        </button>
+      </div>
+
+      {analysisBanner && (
+        <div
+          className={`image-analysis-banner ${matchedInDb ? 'matched' : 'analyzed'}`}
+          role="status"
+          data-testid="banner-image-analysis"
+        >
+          <Sparkles size={24} />
+          <span>{analysisBanner}</span>
+        </div>
+      )}
+
+      <label className="field-label">
+        Nome do produto
+        <input
+          autoFocus
+          required
+          value={name}
+          onChange={e => setName(e.target.value)}
+          placeholder="Ex.: Milho em Grão"
+          data-testid="input-product-name"
+        />
+        {!initial && (
+          <div className="suggestion-row">
+            {quickProducts.map(item => (
+              <button
+                type="button"
+                key={item}
+                onClick={() => applySuggestion(item)}
+                className="suggestion-chip"
+              >
+                {item}
+              </button>
+            ))}
+          </div>
+        )}
       </label>
-      <label className="field-label">Unidade<select value={unit} onChange={e => setUnit(e.target.value)}><option value="kg">Quilos (kg)</option><option value="un">Unidades (un)</option><option value="L">Litros (L)</option><option value="saco">Sacos</option></select></label>
-    </div>
-    <div className="form-row">
-      <label className="field-label">Estoque mínimo<input type="number" min="0" step="any" value={minimum} onChange={e => setMinimum(e.target.value)} placeholder="Ex.: 20" /></label>
-      <label className="field-label">Preço por {unit} (R$)<input type="number" min="0" step="0.01" value={unitCost} onChange={e => setUnitCost(e.target.value)} placeholder="R$ 0,00" /></label>
-    </div>
-    <div className="modal-actions"><button type="button" className="button secondary" onClick={onClose}>Cancelar</button><button className="button primary" disabled={busy || !name.trim() || quantity === ''} data-testid="button-save-product">{busy ? 'Salvando…' : 'Salvar Produto'}</button></div>
-  </form>;
+
+      <div className="field-label">
+        Tipo
+        <div className="choice-grid">
+          {categoryOptions.map(opt => (
+            <button
+              type="button"
+              key={opt.key}
+              className={`choice-pill ${category === opt.key ? 'selected' : ''}`}
+              onClick={() => setCategory(opt.key)}
+              data-testid={`choice-category-${opt.key}`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="form-row">
+        <label className="field-label">
+          {initial ? 'Saldo atual' : 'Quantidade'}
+          <input
+            required
+            type="number"
+            min="0"
+            step="any"
+            value={quantity}
+            onChange={e => setQuantity(e.target.value)}
+            placeholder="0"
+            disabled={!!initial}
+            data-testid="input-product-quantity"
+          />
+          {!initial && (
+            <div className="suggestion-row">
+              {quickQuantities.map(q => (
+                <button
+                  type="button"
+                  key={q}
+                  onClick={() => setQuantity(String(q))}
+                  className="suggestion-chip"
+                >
+                  +{q}
+                </button>
+              ))}
+            </div>
+          )}
+        </label>
+        <label className="field-label">
+          Unidade
+          <select value={unit} onChange={e => setUnit(e.target.value)} data-testid="select-product-unit">
+            <option value="kg">Quilos (kg)</option>
+            <option value="un">Unidades (un)</option>
+            <option value="L">Litros (L)</option>
+            <option value="saco">Sacos</option>
+          </select>
+        </label>
+      </div>
+
+      <div className="form-row">
+        <label className="field-label">
+          Estoque mínimo
+          <input
+            type="number"
+            min="0"
+            step="any"
+            value={minimum}
+            onChange={e => setMinimum(e.target.value)}
+            placeholder="Ex.: 20"
+            data-testid="input-product-minimum"
+          />
+        </label>
+        <label className="field-label">
+          Preço por {unit} (R$)
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={unitCost}
+            onChange={e => setUnitCost(e.target.value)}
+            placeholder="R$ 0,00"
+            data-testid="input-product-cost"
+          />
+        </label>
+      </div>
+
+      <div className="modal-actions">
+        <button type="button" className="button secondary" onClick={onClose}>
+          Cancelar
+        </button>
+        <button
+          className="button primary"
+          disabled={busy || analyzingImage || !name.trim() || quantity === ''}
+          data-testid="button-save-product"
+        >
+          {busy ? 'Salvando…' : 'Salvar Produto'}
+        </button>
+      </div>
+    </form>
+  );
 }
 
 function MovementForm({ products, onSave, busy, onClose, preferred, initialProductId }: { products: Product[]; onSave: (data: { productId: number; direction: 'in' | 'out'; quantity: number; note: string }) => void; busy: boolean; onClose: () => void; preferred?: 'in' | 'out'; initialProductId?: number }) {
@@ -348,7 +795,7 @@ function DashboardScreen({ onGoToSlide }: { onGoToSlide: (idx: number) => void }
 
   const onMovement = (input: { productId: number; direction: 'in' | 'out'; quantity: number; note: string }) => createMove.mutate({ data: input }, { onSuccess: () => { refresh(getGetMovementsQueryKey(), getGetProductsQueryKey(), getGetDashboardQueryKey()); setModal(null); setPreselectedProductId(undefined); } });
   const onFinance = (input: { kind: 'payable' | 'receivable'; description: string; amount: number; dueDate: string; category: string }) => createFinance.mutate({ data: input }, { onSuccess: () => { refresh(getGetFinanceEntriesQueryKey(), getGetDashboardQueryKey()); setModal(null); } });
-  const onProduct = (input: { name: string; category: Product['category']; unit: string; quantity: number; minimumQuantity: number | null; unitCost: number | null }) => createProduct.mutate({ data: input }, { onSuccess: () => { refresh(getGetProductsQueryKey(), getGetDashboardQueryKey()); setModal(null); } });
+  const onProduct = (input: { name: string; category: Product['category']; unit: string; quantity: number; minimumQuantity: number | null; unitCost: number | null; imageData?: string | null; imageSignature?: string | null }) => createProduct.mutate({ data: input }, { onSuccess: () => { refresh(getGetProductsQueryKey(), getGetDashboardQueryKey()); setModal(null); } });
 
   return (
     <div className="screen-panel">
@@ -359,7 +806,7 @@ function DashboardScreen({ onGoToSlide }: { onGoToSlide: (idx: number) => void }
         </div>
         <div className="screen-header-actions">
           <button className="button primary giant-btn" onClick={() => setModal('product')}>
-            <Plus size={26} /> Novo Produto
+            <Plus size={26} /> Adicionar Produto
           </button>
         </div>
       </div>
@@ -445,7 +892,7 @@ function DashboardScreen({ onGoToSlide }: { onGoToSlide: (idx: number) => void }
 
       {modal === 'movement' && <Modal title={preferred === 'in' ? 'Entrada no Estoque' : 'Saída do Estoque'} eyebrow="ESTOQUE · MOVIMENTO" onClose={() => { setModal(null); setPreselectedProductId(undefined); }}><MovementForm products={products} preferred={preferred} initialProductId={preselectedProductId} onClose={() => { setModal(null); setPreselectedProductId(undefined); }} busy={createMove.isPending} onSave={onMovement} /></Modal>}
       {modal === 'finance' && <Modal title="Anotar Conta ou Venda" eyebrow="FINANCEIRO · REGISTRO" onClose={() => setModal(null)}><FinanceForm preferredKind={preferredFinanceKind} onClose={() => setModal(null)} busy={createFinance.isPending} onSave={onFinance} /></Modal>}
-      {modal === 'product' && <Modal title="Cadastrar Produto" eyebrow="ESTOQUE · NOVO ITEM" onClose={() => setModal(null)}><ProductForm onClose={() => setModal(null)} busy={createProduct.isPending} onSave={onProduct} /></Modal>}
+      {modal === 'product' && <Modal title="Adicionar Produto" eyebrow="ESTOQUE · NOVO ITEM" onClose={() => setModal(null)}><ProductForm onClose={() => setModal(null)} busy={createProduct.isPending} onSave={onProduct} /></Modal>}
     </div>
   );
 }
@@ -459,8 +906,14 @@ function StockScreen() {
   const createMovement = useCreateMovement();
   const deleteMovement = useDeleteMovement();
   const refresh = useRefresh();
+  const quickPhotoInputRef = useRef<HTMLInputElement | null>(null);
   const [modal, setModal] = useState<'product' | 'movement' | null>(null);
   const [editing, setEditing] = useState<Product | undefined>();
+  const [photoPrefill, setPhotoPrefill] = useState<{
+    prepared: PreparedImageData;
+    analysis: ImageAnalysisResult | null;
+  } | null>(null);
+  const [analyzingTopPhoto, setAnalyzingTopPhoto] = useState(false);
   const [movementPref, setMovementPref] = useState<{ direction: 'in' | 'out'; productId?: number }>({ direction: 'in' });
   const [filter, setFilter] = useState('todos');
   const [subView, setSubView] = useState<'products' | 'movements'>('products');
@@ -479,9 +932,72 @@ function StockScreen() {
   const safeMovePage = Math.min(page, totalMovePages - 1);
   const visibleMovements = allMovements.slice(safeMovePage * perPage, (safeMovePage + 1) * perPage);
 
-  const saveProduct = (input: { name: string; category: Product['category']; unit: string; quantity: number; minimumQuantity: number | null; unitCost: number | null }) => {
-    if (editing) updateProduct.mutate({ productId: editing.id, data: { name: input.name, category: input.category, unit: input.unit, minimumQuantity: input.minimumQuantity, unitCost: input.unitCost } }, { onSuccess: () => { refresh(getGetProductsQueryKey(), getGetDashboardQueryKey(), getGetFeedRecipesQueryKey()); setEditing(undefined); setModal(null); } });
-    else createProduct.mutate({ data: input }, { onSuccess: () => { refresh(getGetProductsQueryKey(), getGetDashboardQueryKey()); setModal(null); } });
+  const handleQuickPhotoSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAnalyzingTopPhoto(true);
+    try {
+      const prepared = await extractImageFeatures(file);
+      let analysis: ImageAnalysisResult | null = null;
+      try {
+        analysis = await analyzeProductImageOnServer(prepared);
+      } catch {
+        analysis = null;
+      }
+      setEditing(undefined);
+      setPhotoPrefill({ prepared, analysis });
+      setModal('product');
+    } finally {
+      setAnalyzingTopPhoto(false);
+      e.target.value = '';
+    }
+  };
+
+  const saveProduct = (input: {
+    name: string;
+    category: Product['category'];
+    unit: string;
+    quantity: number;
+    minimumQuantity: number | null;
+    unitCost: number | null;
+    imageData?: string | null;
+    imageSignature?: string | null;
+  }) => {
+    if (editing) {
+      updateProduct.mutate(
+        {
+          productId: editing.id,
+          data: {
+            name: input.name,
+            category: input.category,
+            unit: input.unit,
+            minimumQuantity: input.minimumQuantity,
+            unitCost: input.unitCost,
+            imageData: input.imageData,
+            imageSignature: input.imageSignature,
+          },
+        },
+        {
+          onSuccess: () => {
+            refresh(getGetProductsQueryKey(), getGetDashboardQueryKey(), getGetFeedRecipesQueryKey());
+            setEditing(undefined);
+            setPhotoPrefill(null);
+            setModal(null);
+          },
+        },
+      );
+    } else {
+      createProduct.mutate(
+        { data: input },
+        {
+          onSuccess: () => {
+            refresh(getGetProductsQueryKey(), getGetDashboardQueryKey());
+            setPhotoPrefill(null);
+            setModal(null);
+          },
+        },
+      );
+    }
   };
   const onMovement = (input: { productId: number; direction: 'in' | 'out'; quantity: number; note: string }) => createMovement.mutate({ data: input }, { onSuccess: () => { refresh(getGetProductsQueryKey(), getGetMovementsQueryKey(), getGetDashboardQueryKey()); setModal(null); } });
   const removeProduct = (p: Product) => { if (window.confirm(`Remover ${p.name} do estoque?`)) deleteProduct.mutate({ productId: p.id }, { onSuccess: () => refresh(getGetProductsQueryKey(), getGetDashboardQueryKey()) }); };
@@ -491,6 +1007,14 @@ function StockScreen() {
 
   return (
     <div className="screen-panel">
+      <input
+        ref={quickPhotoInputRef}
+        type="file"
+        accept="image/*"
+        className="sr-only-input"
+        onChange={e => { void handleQuickPhotoSelected(e); }}
+        data-testid="input-quick-photo-product"
+      />
       <div className="screen-header">
         <div>
           <span className="screen-kicker"><Package size={22} /> TELA 2 · ESTOQUE</span>
@@ -500,8 +1024,25 @@ function StockScreen() {
           <button className="button secondary giant-btn" onClick={() => { setMovementPref({ direction: 'in' }); setModal('movement'); }}>
             <ArrowLeftRight size={24} /> Movimento
           </button>
-          <button className="button primary giant-btn" onClick={() => { setEditing(undefined); setModal('product'); }} data-testid="button-new-product">
-            <Plus size={26} /> Novo Produto
+          <button
+            className="button secondary giant-btn photo-cta-btn"
+            onClick={() => quickPhotoInputRef.current?.click()}
+            disabled={analyzingTopPhoto}
+            data-testid="button-add-product-photo"
+          >
+            <Camera size={26} />
+            {analyzingTopPhoto ? 'Analisando Foto…' : 'Adicionar Produto por Foto'}
+          </button>
+          <button
+            className="button primary giant-btn"
+            onClick={() => {
+              setEditing(undefined);
+              setPhotoPrefill(null);
+              setModal('product');
+            }}
+            data-testid="button-new-product"
+          >
+            <Plus size={26} /> Adicionar Produto
           </button>
         </div>
       </div>
@@ -548,13 +1089,17 @@ function StockScreen() {
         {subView === 'products' ? (
           isLoading ? <div className="giant-empty">Carregando estoque…</div> :
           isError ? <div className="giant-empty"><button className="button secondary" onClick={() => { void refetch(); }}>Tentar de novo</button></div> :
-          visibleProducts.length === 0 ? <div className="giant-empty"><p>Nenhum produto nesta categoria.</p><button className="button primary giant-btn" onClick={() => setModal('product')}><Plus size={26} /> Cadastrar Produto</button></div> :
+          visibleProducts.length === 0 ? <div className="giant-empty"><p>Nenhum produto nesta categoria.</p><button className="button primary giant-btn" onClick={() => setModal('product')}><Plus size={26} /> Adicionar Produto</button></div> :
           <div className="giant-list">
             {visibleProducts.map(p => {
               const low = p.minimumQuantity !== null && p.quantity <= p.minimumQuantity;
               return (
                 <article className={`giant-list-row ${low ? 'row-attention' : ''}`} key={p.id} data-testid={`row-product-${p.id}`}>
-                  <span className={`giant-dir-badge ${low ? 'out' : 'in'}`}><Package size={28} /></span>
+                  {p.imageData ? (
+                    <img src={p.imageData} alt={p.name} className="product-row-thumb" />
+                  ) : (
+                    <span className={`giant-dir-badge ${low ? 'out' : 'in'}`}><Package size={28} /></span>
+                  )}
                   <div className="giant-row-main">
                     <b>{p.name}</b>
                     <span>{categoryNames[p.category] ?? p.category}{p.unitCost !== null ? ` · ${money(p.unitCost)}/${p.unit}` : ''}{low ? ' · ⚠ REPOR' : ''}</span>
@@ -566,7 +1111,7 @@ function StockScreen() {
                   <div className="giant-row-actions">
                     <button type="button" className="giant-quick-tag in" onClick={() => { setMovementPref({ direction: 'in', productId: p.id }); setModal('movement'); }}>+ Entrada</button>
                     <button type="button" className="giant-quick-tag out" onClick={() => { setMovementPref({ direction: 'out', productId: p.id }); setModal('movement'); }}>− Saída</button>
-                    <button className="icon-button giant-icon-btn" aria-label={`Editar ${p.name}`} onClick={() => { setEditing(p); setModal('product'); }}><Pencil size={24} /></button>
+                    <button className="icon-button giant-icon-btn" aria-label={`Editar ${p.name}`} onClick={() => { setEditing(p); setPhotoPrefill(null); setModal('product'); }}><Pencil size={24} /></button>
                     <button className="icon-button giant-icon-btn danger-icon" aria-label={`Excluir ${p.name}`} onClick={() => removeProduct(p)} disabled={deleteProduct.isPending}><Trash2 size={24} /></button>
                   </div>
                 </article>
@@ -591,7 +1136,31 @@ function StockScreen() {
         )}
       </div>
 
-      {modal === 'product' && <Modal title={editing ? 'Editar Produto' : 'Novo Produto'} eyebrow="ESTOQUE · PRODUTO" onClose={() => { setModal(null); setEditing(undefined); }}><ProductForm key={editing?.id ?? 'new'} initial={editing} onClose={() => { setModal(null); setEditing(undefined); }} busy={createProduct.isPending || updateProduct.isPending} onSave={saveProduct} /></Modal>}
+      {modal === 'product' && (
+        <Modal
+          title={editing ? 'Editar Produto' : photoPrefill ? 'Adicionar Produto por Foto' : 'Adicionar Produto'}
+          eyebrow="ESTOQUE · PRODUTO"
+          onClose={() => {
+            setModal(null);
+            setEditing(undefined);
+            setPhotoPrefill(null);
+          }}
+        >
+          <ProductForm
+            key={editing?.id ?? (photoPrefill ? `photo-${photoPrefill.prepared.fileName}` : 'new')}
+            initial={editing}
+            initialPhotoData={photoPrefill?.prepared ?? null}
+            initialAnalysis={photoPrefill?.analysis ?? null}
+            onClose={() => {
+              setModal(null);
+              setEditing(undefined);
+              setPhotoPrefill(null);
+            }}
+            busy={createProduct.isPending || updateProduct.isPending}
+            onSave={saveProduct}
+          />
+        </Modal>
+      )}
       {modal === 'movement' && <Modal title="Registrar Movimento" eyebrow="ESTOQUE · ENTRADA OU SAÍDA" onClose={() => setModal(null)}><MovementForm products={list} preferred={movementPref.direction} initialProductId={movementPref.productId} onClose={() => setModal(null)} busy={createMovement.isPending} onSave={onMovement} /></Modal>}
     </div>
   );

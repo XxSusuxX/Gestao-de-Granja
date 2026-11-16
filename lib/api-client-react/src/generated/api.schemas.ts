@@ -29,7 +29,7 @@ export interface Product {
   /** @nullable */
   minimumQuantity: number | null;
   /** @nullable */
-  unitCost: number | null;
+  unitCost: number | null; imageData?: string | null; imageSignature?: string | null;
   createdAt: string;
 }
 
@@ -55,7 +55,7 @@ export interface ProductInput {
   /** @nullable */
   minimumQuantity?: number | null;
   /** @nullable */
-  unitCost?: number | null;
+  unitCost?: number | null; imageData?: string | null; imageSignature?: string | null;
 }
 
 export type ProductUpdateCategory = typeof ProductUpdateCategory[keyof typeof ProductUpdateCategory];
@@ -78,7 +78,7 @@ export interface ProductUpdate {
   /** @nullable */
   minimumQuantity?: number | null;
   /** @nullable */
-  unitCost?: number | null;
+  unitCost?: number | null; imageData?: string | null; imageSignature?: string | null;
 }
 
 export type MovementDirection = typeof MovementDirection[keyof typeof MovementDirection];
@@ -309,7 +309,7 @@ export interface RecipeIngredient {
   productName: string;
   quantityKg: number;
   /** @nullable */
-  unitCost: number | null;
+  unitCost: number | null; imageData?: string | null; imageSignature?: string | null;
   /** @nullable */
   lineCost: number | null;
   availableQuantity: number;

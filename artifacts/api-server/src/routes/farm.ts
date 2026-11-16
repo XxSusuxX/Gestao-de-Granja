@@ -50,7 +50,7 @@ function presentProduct(product: Product) {
     minimumQuantity: product.minimumQuantity,
     unitCost:
       product.unitCostCents === null ? null : product.unitCostCents / 100,
-    createdAt: product.createdAt.toISOString(),
+    createdAt: product.createdAt.toISOString(), imageData: product.imageData ?? null, imageSignature: product.imageSignature ?? null,
   };
 }
 
@@ -131,7 +131,7 @@ router.post("/inventory/products", async (req, res): Promise<void> => {
       category: parsed.data.category,
       unit: parsed.data.unit.trim(),
       quantity: parsed.data.quantity,
-      minimumQuantity: parsed.data.minimumQuantity ?? null,
+      minimumQuantity: parsed.data.minimumQuantity ?? null, imageData: parsed.data.imageData ?? null, imageSignature: parsed.data.imageSignature ?? null,
       unitCostCents:
         parsed.data.unitCost == null
           ? null
@@ -176,7 +176,7 @@ router.patch(
     const changes: Partial<typeof productsTable.$inferInsert> = {};
     if (body.data.name !== undefined) changes.name = body.data.name.trim();
     if (body.data.category !== undefined) changes.category = body.data.category;
-    if (body.data.unit !== undefined) changes.unit = body.data.unit.trim();
+    if (body.data.unit !== undefined) changes.unit = body.data.unit.trim(); if (body.data.imageData !== undefined) changes.imageData = body.data.imageData ?? null; if (body.data.imageSignature !== undefined) changes.imageSignature = body.data.imageSignature ?? null;
     if (body.data.minimumQuantity !== undefined) {
       changes.minimumQuantity = body.data.minimumQuantity ?? null;
     }

@@ -204,6 +204,8 @@ interface SbProductRow {
   quantity: number;
   minimum_quantity: number | null;
   unit_cost_cents: number | null;
+  image_data?: string | null;
+  image_signature?: string | null;
   created_at: string;
 }
 
@@ -294,6 +296,8 @@ function presentProduct(p: SbProductRow) {
       p.minimum_quantity === null ? null : Number(p.minimum_quantity),
     unitCost:
       p.unit_cost_cents === null ? null : Number(p.unit_cost_cents) / 100,
+    imageData: p.image_data ?? null,
+    imageSignature: p.image_signature ?? null,
     createdAt: toIsoTimestamp(p.created_at),
   };
 }
@@ -610,9 +614,262 @@ supabaseRestRouter.post("/inventory/products", async (req, res) => {
         parsed.data.unitCost == null
           ? null
           : Math.round(parsed.data.unitCost * 100),
+      image_data: parsed.data.imageData ?? null,
+      image_signature: parsed.data.imageSignature ?? null,
     }),
   });
   res.status(201).json(CreateProductResponse.parse(presentProduct(product)));
+});
+
+interface ParsedSignature {
+  v?: number[];
+  rgb?: [number, number, number];
+  std?: number;
+  fn?: string;
+}
+
+function parseImageSignature(raw: string | undefined | null): ParsedSignature | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as ParsedSignature;
+  } catch {
+    return null;
+  }
+}
+
+function computeSignatureSimilarity(a: ParsedSignature, b: ParsedSignature): number {
+  if (!a.v || !b.v || a.v.length !== b.v.length || a.v.length === 0) {
+    return 0;
+  }
+  let sumAbsDiff = 0;
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < a.v.length; i++) {
+    const va = a.v[i];
+    const vb = b.v[i];
+    sumAbsDiff += Math.abs(va - vb);
+    dot += va * vb;
+    normA += va * va;
+    normB += vb * vb;
+  }
+  const maeSim = Math.max(0, 1 - sumAbsDiff / (a.v.length * 255));
+  const cosSim =
+    normA > 0 && normB > 0 ? dot / (Math.sqrt(normA) * Math.sqrt(normB)) : 0;
+  return maeSim * 0.65 + cosSim * 0.35;
+}
+
+supabaseRestRouter.post("/inventory/analyze-image", async (req, res) => {
+  try {
+    const rawSignature = String(req.body?.imageSignature ?? "");
+    const rawFileName = String(req.body?.fileName ?? "").toLowerCase();
+    const sig = parseImageSignature(rawSignature);
+
+    const products = await sbFetch<SbProductRow[]>(
+      "farm_products?select=*&order=id.desc",
+    );
+
+    // 1. Compare visual signature against all product images already saved in Supabase
+    let bestMatch: SbProductRow | null = null;
+    let bestSimilarity = 0;
+
+    if (sig && sig.v && sig.v.length > 0) {
+      for (const prod of products) {
+        if (!prod.image_signature) continue;
+        const dbSig = parseImageSignature(prod.image_signature);
+        if (!dbSig) continue;
+        const sim = computeSignatureSimilarity(sig, dbSig);
+        if (sim > bestSimilarity) {
+          bestSimilarity = sim;
+          bestMatch = prod;
+        }
+      }
+    }
+
+    if (bestMatch && bestSimilarity >= 0.87) {
+      const presented = presentProduct(bestMatch);
+      res.json({
+        matchedInDb: true,
+        similarity: Math.round(bestSimilarity * 100),
+        matchedProduct: presented,
+        suggestion: {
+          name: presented.name,
+          category: presented.category,
+          unit: presented.unit,
+          quantity: 25,
+          minimumQuantity: presented.minimumQuantity ?? 20,
+          unitCost: presented.unitCost,
+          reason: `Imagem reconhecida no banco (${Math.round(bestSimilarity * 100)}% de semelhança com “${presented.name}”).`,
+        },
+      });
+      return;
+    }
+
+    // 2. Analyze visual features (color profile, luminance, contrast) + filename clues
+    const [r, g, b] = sig?.rgb ?? [160, 150, 110];
+    const std = sig?.std ?? 40;
+    const fn = `${rawFileName} ${sig?.fn ?? ""}`.toLowerCase();
+
+    type CategoryKey = "feed" | "medicine" | "supplies" | "equipment" | "other";
+    let detectedCategory: CategoryKey = "feed";
+    let keywordHint = "";
+    let fallbackName = "Ração Postura";
+    let fallbackUnit = "kg";
+    let fallbackMin = 50;
+    let fallbackCost = 2.4;
+
+    if (fn.includes("vacina") || fn.includes("remedio") || fn.includes("remédio") || fn.includes("medicamento") || fn.includes("antibiotico") || fn.includes("vitamina")) {
+      detectedCategory = "medicine";
+      keywordHint = "vacina";
+      fallbackName = "Vacina / Medicamento Avícola";
+      fallbackUnit = "un";
+      fallbackMin = 2;
+      fallbackCost = 45.0;
+    } else if (fn.includes("cartela") || fn.includes("ovo") || fn.includes("embalagem") || fn.includes("maravalha") || fn.includes("insumo") || fn.includes("cal")) {
+      detectedCategory = "supplies";
+      keywordHint = "cartela";
+      fallbackName = "Cartelas para 30 Ovos";
+      fallbackUnit = "un";
+      fallbackMin = 50;
+      fallbackCost = 0.95;
+    } else if (fn.includes("comedouro") || fn.includes("bebedouro") || fn.includes("lampada") || fn.includes("campanula") || fn.includes("equipamento")) {
+      detectedCategory = "equipment";
+      keywordHint = "comedouro";
+      fallbackName = "Comedouro / Bebedouro Tubular";
+      fallbackUnit = "un";
+      fallbackMin = 2;
+      fallbackCost = 38.0;
+    } else if (fn.includes("soja")) {
+      detectedCategory = "feed";
+      keywordHint = "soja";
+      fallbackName = "Farelo de Soja";
+      fallbackUnit = "kg";
+      fallbackMin = 80;
+      fallbackCost = 2.9;
+    } else if (fn.includes("nucleo") || fn.includes("núcleo")) {
+      detectedCategory = "feed";
+      keywordHint = "núcleo";
+      fallbackName = "Núcleo Postura 4%";
+      fallbackUnit = "kg";
+      fallbackMin = 20;
+      fallbackCost = 6.8;
+    } else if (fn.includes("calcario") || fn.includes("calcário")) {
+      detectedCategory = "feed";
+      keywordHint = "calcário";
+      fallbackName = "Calcário Calcítico";
+      fallbackUnit = "kg";
+      fallbackMin = 20;
+      fallbackCost = 0.85;
+    } else if (fn.includes("milho")) {
+      detectedCategory = "feed";
+      keywordHint = "milho";
+      fallbackName = "Milho em Grão";
+      fallbackUnit = "kg";
+      fallbackMin = 150;
+      fallbackCost = 1.45;
+    } else if (b > r + 14 || (g > r + 18 && b > 100)) {
+      // Cool blue/cyan/green tones typical of veterinary medicine bottles & labels
+      detectedCategory = "medicine";
+      keywordHint = "vacina";
+      fallbackName = "Vacina Newcastle + Bronquite";
+      fallbackUnit = "un";
+      fallbackMin = 2;
+      fallbackCost = 45.0;
+    } else if (r > 150 && g > 115 && r - b > 42) {
+      // Golden/yellow warm tones typical of corn & poultry feed
+      detectedCategory = "feed";
+      keywordHint = "milho";
+      fallbackName = "Milho em Grão";
+      fallbackUnit = "kg";
+      fallbackMin = 150;
+      fallbackCost = 1.45;
+    } else if (r > 110 && g > 80 && b < 115 && r >= g && g >= b) {
+      // Earthy brown/tan tones typical of soybean meal & ration sacks
+      detectedCategory = "feed";
+      keywordHint = "soja";
+      fallbackName = "Farelo de Soja";
+      fallbackUnit = "kg";
+      fallbackMin = 80;
+      fallbackCost = 2.9;
+    } else if (r > 185 && g > 185 && b > 175 && Math.abs(r - b) < 25) {
+      // High-brightness white/light-gray mineral powder or egg trays
+      detectedCategory = "feed";
+      keywordHint = "calcário";
+      fallbackName = "Calcário Calcítico";
+      fallbackUnit = "kg";
+      fallbackMin = 20;
+      fallbackCost = 0.85;
+    } else if (std < 38) {
+      detectedCategory = "supplies";
+      keywordHint = "cartela";
+      fallbackName = "Cartelas para 30 Ovos";
+      fallbackUnit = "un";
+      fallbackMin = 50;
+      fallbackCost = 0.95;
+    } else if (std > 68) {
+      detectedCategory = "equipment";
+      keywordHint = "equipamento";
+      fallbackName = "Comedouro / Bebedouro Avícola";
+      fallbackUnit = "un";
+      fallbackMin = 2;
+      fallbackCost = 38.0;
+    }
+
+    // Check if the database already has a product matching this item/category to suggest its exact name & values
+    const dbSuggested =
+      (keywordHint
+        ? products.find((p) => p.name.toLowerCase().includes(keywordHint))
+        : undefined) ??
+      products.find((p) => p.category === detectedCategory);
+
+    if (dbSuggested) {
+      const presented = presentProduct(dbSuggested);
+      res.json({
+        matchedInDb: true,
+        similarity: 84,
+        matchedProduct: presented,
+        suggestion: {
+          name: presented.name,
+          category: presented.category,
+          unit: presented.unit,
+          quantity: 25,
+          minimumQuantity: presented.minimumQuantity ?? fallbackMin,
+          unitCost: presented.unitCost ?? fallbackCost,
+          reason: `Item identificado na categoria ${
+            presented.category === "feed"
+              ? "Alimentação"
+              : presented.category === "medicine"
+                ? "Remédios"
+                : presented.category === "supplies"
+                  ? "Insumos"
+                  : presented.category === "equipment"
+                    ? "Equipamentos"
+                    : "Outros"
+          } — sugerindo cadastro existente “${presented.name}” do banco.`,
+        },
+      });
+      return;
+    }
+
+    res.json({
+      matchedInDb: false,
+      similarity: 0,
+      matchedProduct: null,
+      suggestion: {
+        name: fallbackName,
+        category: detectedCategory,
+        unit: fallbackUnit,
+        quantity: 25,
+        minimumQuantity: fallbackMin,
+        unitCost: fallbackCost,
+        reason: `Imagem analisada: classificado automaticamente na categoria correspondente.`,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Erro ao analisar imagem.",
+    });
+  }
 });
 
 supabaseRestRouter.patch("/inventory/products/:productId", async (req, res) => {
@@ -653,6 +910,12 @@ supabaseRestRouter.patch("/inventory/products/:productId", async (req, res) => {
       body.data.unitCost === null
         ? null
         : Math.round(body.data.unitCost * 100);
+  }
+  if (body.data.imageData !== undefined) {
+    patch.image_data = body.data.imageData ?? null;
+  }
+  if (body.data.imageSignature !== undefined) {
+    patch.image_signature = body.data.imageSignature ?? null;
   }
 
   const updated = await sbFetch<SbProductRow[]>(

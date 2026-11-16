@@ -26,6 +26,8 @@ export const productsTable = pgTable("farm_products", {
   quantity: doublePrecision("quantity").notNull().default(0),
   minimumQuantity: doublePrecision("minimum_quantity"),
   unitCostCents: integer("unit_cost_cents"),
+  imageData: text("image_data"),
+  imageSignature: text("image_signature"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

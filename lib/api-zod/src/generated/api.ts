@@ -43,7 +43,7 @@ export const GetDashboardResponse = zod.object({
   "unit": zod.string(),
   "quantity": zod.number(),
   "minimumQuantity": zod.number().nullable(),
-  "unitCost": zod.number().nullable(),
+  "unitCost": zod.number().nullable(), "imageData": zod.string().nullish(), "imageSignature": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 }))
 })
@@ -59,7 +59,7 @@ export const GetProductsResponseItem = zod.object({
   "unit": zod.string(),
   "quantity": zod.number(),
   "minimumQuantity": zod.number().nullable(),
-  "unitCost": zod.number().nullable(),
+  "unitCost": zod.number().nullable(), "imageData": zod.string().nullish(), "imageSignature": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 export const GetProductsResponse = zod.array(GetProductsResponseItem)
@@ -80,7 +80,7 @@ export const CreateProductBody = zod.object({
   "unit": zod.string().min(1),
   "quantity": zod.number().min(createProductBodyQuantityMin),
   "minimumQuantity": zod.number().nullish(),
-  "unitCost": zod.number().nullish()
+  "unitCost": zod.number().nullish(), "imageData": zod.string().nullish(), "imageSignature": zod.string().nullish()
 })
 
 export const CreateProductResponse = zod.object({
@@ -90,7 +90,7 @@ export const CreateProductResponse = zod.object({
   "unit": zod.string(),
   "quantity": zod.number(),
   "minimumQuantity": zod.number().nullable(),
-  "unitCost": zod.number().nullable(),
+  "unitCost": zod.number().nullable(), "imageData": zod.string().nullish(), "imageSignature": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -114,7 +114,7 @@ export const UpdateProductBody = zod.object({
   "category": zod.enum(['feed', 'medicine', 'supplies', 'equipment', 'other']).optional(),
   "unit": zod.string().min(1).optional(),
   "minimumQuantity": zod.number().nullish(),
-  "unitCost": zod.number().nullish()
+  "unitCost": zod.number().nullish(), "imageData": zod.string().nullish(), "imageSignature": zod.string().nullish()
 })
 
 export const UpdateProductResponse = zod.object({
@@ -124,7 +124,7 @@ export const UpdateProductResponse = zod.object({
   "unit": zod.string(),
   "quantity": zod.number(),
   "minimumQuantity": zod.number().nullable(),
-  "unitCost": zod.number().nullable(),
+  "unitCost": zod.number().nullable(), "imageData": zod.string().nullish(), "imageSignature": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -472,7 +472,7 @@ export const GetFeedRecipesResponseItem = zod.object({
   "productId": zod.number().int(),
   "productName": zod.string(),
   "quantityKg": zod.number(),
-  "unitCost": zod.number().nullable(),
+  "unitCost": zod.number().nullable(), "imageData": zod.string().nullish(), "imageSignature": zod.string().nullish(),
   "lineCost": zod.number().nullable(),
   "availableQuantity": zod.number()
 })),
@@ -509,7 +509,7 @@ export const CreateFeedRecipeResponse = zod.object({
   "productId": zod.number().int(),
   "productName": zod.string(),
   "quantityKg": zod.number(),
-  "unitCost": zod.number().nullable(),
+  "unitCost": zod.number().nullable(), "imageData": zod.string().nullish(), "imageSignature": zod.string().nullish(),
   "lineCost": zod.number().nullable(),
   "availableQuantity": zod.number()
 })),
@@ -552,7 +552,7 @@ export const UpdateFeedRecipeResponse = zod.object({
   "productId": zod.number().int(),
   "productName": zod.string(),
   "quantityKg": zod.number(),
-  "unitCost": zod.number().nullable(),
+  "unitCost": zod.number().nullable(), "imageData": zod.string().nullish(), "imageSignature": zod.string().nullish(),
   "lineCost": zod.number().nullable(),
   "availableQuantity": zod.number()
 })),
