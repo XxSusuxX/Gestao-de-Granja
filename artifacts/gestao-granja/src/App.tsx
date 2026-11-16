@@ -68,9 +68,12 @@ interface ImageAnalysisResult {
 
 interface PreparedImageData {
   imageData: string;
+  thumbnailData?: string;
   imageSignature: string;
   fileName: string;
 }
+
+export const GEMINI_STORAGE_KEY = 'granja_gemini_api_key';
 
 async function extractImageFeatures(file: File): Promise<PreparedImageData> {
   const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -84,13 +87,38 @@ async function extractImageFeatures(file: File): Promise<PreparedImageData> {
     const img = new Image();
     img.onload = () => {
       try {
-        // 1. Create compact 140x140 thumbnail for fast database storage & display
+        // 1. Create balanced vision image (up to 800px) preserving aspect ratio for AI Vision
+        const maxVisionDim = 800;
+        let vw = img.width;
+        let vh = img.height;
+        if (vw > maxVisionDim || vh > maxVisionDim) {
+          if (vw > vh) {
+            vh = Math.round((vh * maxVisionDim) / vw);
+            vw = maxVisionDim;
+          } else {
+            vw = Math.round((vw * maxVisionDim) / vh);
+            vh = maxVisionDim;
+          }
+        }
+        const visionCanvas = document.createElement('canvas');
+        visionCanvas.width = vw;
+        visionCanvas.height = vh;
+        const vCtx = visionCanvas.getContext('2d');
+        let visionDataUrl = dataUrl;
+        if (vCtx) {
+          vCtx.fillStyle = '#ffffff';
+          vCtx.fillRect(0, 0, vw, vh);
+          vCtx.drawImage(img, 0, 0, vw, vh);
+          visionDataUrl = visionCanvas.toDataURL('image/jpeg', 0.85);
+        }
+
+        // 2. Create compact 140x140 thumbnail for fast database storage & display
         const thumbCanvas = document.createElement('canvas');
         const thumbSize = 140;
         thumbCanvas.width = thumbSize;
         thumbCanvas.height = thumbSize;
         const tCtx = thumbCanvas.getContext('2d');
-        let compactDataUrl = dataUrl;
+        let compactDataUrl = visionDataUrl;
         if (tCtx) {
           tCtx.fillStyle = '#ffffff';
           tCtx.fillRect(0, 0, thumbSize, thumbSize);
@@ -101,7 +129,7 @@ async function extractImageFeatures(file: File): Promise<PreparedImageData> {
           compactDataUrl = thumbCanvas.toDataURL('image/jpeg', 0.78);
         }
 
-        // 2. Compute 4x4 spatial RGB signature (48 values) + global RGB + contrast stdDev
+        // 3. Compute 4x4 spatial RGB signature (48 values) + global RGB + contrast stdDev
         const sigCanvas = document.createElement('canvas');
         const gridSize = 32;
         sigCanvas.width = gridSize;
@@ -157,7 +185,8 @@ async function extractImageFeatures(file: File): Promise<PreparedImageData> {
           const std = Math.round(Math.sqrt(variance));
 
           resolve({
-            imageData: compactDataUrl,
+            imageData: visionDataUrl,
+            thumbnailData: compactDataUrl,
             imageSignature: JSON.stringify({
               v: vector,
               rgb: [avgR, avgG, avgB],
@@ -177,6 +206,7 @@ async function extractImageFeatures(file: File): Promise<PreparedImageData> {
       );
       resolve({
         imageData: dataUrl,
+        thumbnailData: dataUrl,
         imageSignature: JSON.stringify({
           v: fallbackVec,
           rgb: [170, 145, 95],
@@ -192,6 +222,7 @@ async function extractImageFeatures(file: File): Promise<PreparedImageData> {
       );
       resolve({
         imageData: dataUrl,
+        thumbnailData: dataUrl,
         imageSignature: JSON.stringify({
           v: fallbackVec,
           rgb: [170, 145, 95],
@@ -209,15 +240,19 @@ async function analyzeProductImageOnServer(
   prepared: PreparedImageData,
 ): Promise<ImageAnalysisResult> {
   const token = localStorage.getItem(AUTH_STORAGE_KEY);
+  const geminiApiKey = localStorage.getItem(GEMINI_STORAGE_KEY) || '';
   const res = await fetch('/api/inventory/analyze-image', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(geminiApiKey ? { 'x-gemini-api-key': geminiApiKey } : {}),
     },
     body: JSON.stringify({
       imageSignature: prepared.imageSignature,
       fileName: prepared.fileName,
+      imageData: prepared.imageData,
+      geminiApiKey: geminiApiKey || undefined,
     }),
   });
   if (!res.ok) {
@@ -414,6 +449,7 @@ function ProductForm({
   onSave,
   busy,
   onClose,
+  onOpenAiConfig,
 }: {
   initial?: Product;
   initialPhotoData?: PreparedImageData | null;
@@ -430,6 +466,7 @@ function ProductForm({
   }) => void;
   busy: boolean;
   onClose: () => void;
+  onOpenAiConfig?: () => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [name, setName] = useState(
@@ -458,7 +495,7 @@ function ProductForm({
         : ''),
   );
   const [imageData, setImageData] = useState<string | null>(
-    initialPhotoData?.imageData ?? initial?.imageData ?? null,
+    initialPhotoData?.thumbnailData ?? initialPhotoData?.imageData ?? initial?.imageData ?? null,
   );
   const [imageSignature, setImageSignature] = useState<string | null>(
     initialPhotoData?.imageSignature ?? initial?.imageSignature ?? null,
@@ -501,14 +538,14 @@ function ProductForm({
     setAnalyzingImage(true);
     try {
       const prepared = await extractImageFeatures(file);
-      setImageData(prepared.imageData);
+      setImageData(prepared.thumbnailData ?? prepared.imageData);
       setImageSignature(prepared.imageSignature);
 
       const analysis = await analyzeProductImageOnServer(prepared);
       setName(analysis.suggestion.name);
       setCategory(analysis.suggestion.category);
       setUnit(analysis.suggestion.unit);
-      if (!initial && (!quantity || quantity === '0')) {
+      if (!initial) {
         setQuantity(String(analysis.suggestion.quantity));
       }
       setMinimum(String(analysis.suggestion.minimumQuantity ?? 0));
@@ -567,6 +604,17 @@ function ProductForm({
         <div className="photo-picker-info">
           <b>{imageData ? 'Imagem do produto pronta' : 'Identificador por Imagem'}</b>
           <span>Abra a galeria (celular ou PC) para preencher tudo automático</span>
+          {onOpenAiConfig && (
+            <button
+              type="button"
+              className="ai-config-link"
+              onClick={onOpenAiConfig}
+            >
+              {localStorage.getItem(GEMINI_STORAGE_KEY)
+                ? '🟢 IA Gemini Vision Conectada'
+                : '🔑 Conectar IA Gemini (Conta garrafas e lê rótulos)'}
+            </button>
+          )}
         </div>
         <button
           type="button"
@@ -924,6 +972,10 @@ function StockScreen() {
   const [subView, setSubView] = useState<'products' | 'movements'>('products');
   const [page, setPage] = useState(0);
 
+  const [showGeminiModal, setShowGeminiModal] = useState(false);
+  const [geminiApiKey, setGeminiApiKey] = useState(() => localStorage.getItem(GEMINI_STORAGE_KEY) || '');
+  const [tempGeminiKey, setTempGeminiKey] = useState(geminiApiKey);
+
   const list = products ?? [];
   const filteredProducts = useMemo(() => list.filter(p => filter === 'todos' || p.category === filter), [list, filter]);
 
@@ -1034,6 +1086,19 @@ function StockScreen() {
           >
             <Camera size={26} />
             {analyzingTopPhoto ? 'Analisando Foto…' : 'Adicionar Produto por Foto'}
+          </button>
+          <button
+            type="button"
+            className={`button secondary giant-btn ai-badge-btn ${geminiApiKey ? 'ai-active' : ''}`}
+            onClick={() => {
+              setTempGeminiKey(geminiApiKey);
+              setShowGeminiModal(true);
+            }}
+            title="Configurar IA Google Gemini Vision"
+            data-testid="button-configure-ai"
+          >
+            <Sparkles size={24} />
+            {geminiApiKey ? 'IA Vision Ativa' : 'Configurar IA'}
           </button>
           <button
             className="button primary giant-btn"
@@ -1151,10 +1216,119 @@ function StockScreen() {
             }}
             busy={createProduct.isPending || updateProduct.isPending}
             onSave={saveProduct}
+            onOpenAiConfig={() => {
+              setTempGeminiKey(geminiApiKey);
+              setShowGeminiModal(true);
+            }}
           />
         </Modal>
       )}
       {modal === 'movement' && <Modal title="Registrar Movimento" eyebrow="ESTOQUE · ENTRADA OU SAÍDA" onClose={() => setModal(null)}><MovementForm products={list} preferred={movementPref.direction} initialProductId={movementPref.productId} onClose={() => setModal(null)} busy={createMovement.isPending} onSave={onMovement} /></Modal>}
+
+      {showGeminiModal && (
+        <div className="modal-backdrop" onClick={() => setShowGeminiModal(false)}>
+          <div
+            className="modal-card giant-modal gemini-modal-card"
+            onClick={e => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="modal-header">
+              <div className="modal-header-text">
+                <span className="modal-subtitle">INTELIGÊNCIA ARTIFICIAL · VISÃO</span>
+                <h2 className="modal-title">Configurar IA Gemini Vision</h2>
+              </div>
+              <button
+                type="button"
+                className="button icon-btn"
+                onClick={() => setShowGeminiModal(false)}
+                aria-label="Fechar"
+              >
+                <X size={26} />
+              </button>
+            </div>
+
+            <div className="gemini-modal-content">
+              <div className="gemini-status-card">
+                {geminiApiKey ? (
+                  <p>
+                    🟢 <b>IA Gemini Conectada com Sucesso!</b> Suas fotos de produtos agora são processadas pelo Google Gemini 1.5/2.0 Flash Vision. Ele detecta objetos reais (como 3 garrafas, comedouros, sacaria), conta unidades e lê rótulos automaticamente.
+                  </p>
+                ) : (
+                  <p>
+                    ⚡ <b>Por que usar a chave de IA?</b> Regras simples de cores não conseguem enxergar objetos reais. Com a chave da IA (100% gratuita no Google AI Studio), o Gemini analisa os pixels, conta as 3 garrafas e preenche o cadastro sozinho em 1 segundo!
+                  </p>
+                )}
+              </div>
+
+              <label className="field-label">
+                Chave da API do Google Gemini
+                <input
+                  type="text"
+                  value={tempGeminiKey}
+                  onChange={e => setTempGeminiKey(e.target.value)}
+                  placeholder="Cole sua chave aqui (começa com AIzaSy...)"
+                  className="gemini-key-input"
+                  data-testid="input-gemini-key"
+                />
+              </label>
+
+              <div className="gemini-actions-row">
+                <a
+                  href="https://aistudio.google.com/app/apikey"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="button secondary giant-btn gemini-get-key-btn"
+                >
+                  🔗 Obter Chave Grátis no Google AI Studio
+                </a>
+              </div>
+
+              <div className="modal-actions-giant">
+                {geminiApiKey && (
+                  <button
+                    type="button"
+                    className="button danger giant-btn"
+                    onClick={() => {
+                      localStorage.removeItem(GEMINI_STORAGE_KEY);
+                      setGeminiApiKey('');
+                      setTempGeminiKey('');
+                      setShowGeminiModal(false);
+                    }}
+                  >
+                    Remover
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="button secondary giant-btn"
+                  onClick={() => setShowGeminiModal(false)}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="button primary giant-btn"
+                  onClick={() => {
+                    const clean = tempGeminiKey.trim();
+                    if (clean) {
+                      localStorage.setItem(GEMINI_STORAGE_KEY, clean);
+                      setGeminiApiKey(clean);
+                    } else {
+                      localStorage.removeItem(GEMINI_STORAGE_KEY);
+                      setGeminiApiKey('');
+                    }
+                    setShowGeminiModal(false);
+                  }}
+                  data-testid="button-save-gemini-key"
+                >
+                  Salvar Chave
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

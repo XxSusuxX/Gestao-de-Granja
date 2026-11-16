@@ -1939,3 +1939,73 @@ body,
     gap: 8px;
   }
 }
+
+/* AI Vision (Google Gemini) configuration styles */
+.ai-badge-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-badge-btn.ai-active {
+  background: #23533a !important;
+  color: #f7f9f4 !important;
+  border-color: #23533a !important;
+}
+
+.ai-config-link {
+  background: none;
+  border: none;
+  padding: 4px 0 0 0;
+  color: #1b633a;
+  font-weight: 800;
+  font-size: clamp(14px, 1.6vw, 17px);
+  text-decoration: underline;
+  cursor: pointer;
+  display: block;
+  text-align: left;
+}
+
+.gemini-modal-card {
+  max-width: 620px !important;
+  width: 95vw;
+}
+
+.gemini-modal-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.gemini-status-card {
+  padding: 14px 18px;
+  border-radius: 16px;
+  background: #ebf3e6;
+  border: 2px solid #95c18e;
+  font-size: clamp(15px, 1.7vw, 18px);
+  line-height: 1.45;
+  color: #173e23;
+}
+
+.gemini-status-card p {
+  margin: 0;
+}
+
+.gemini-key-input {
+  width: 100%;
+  font-family: monospace;
+}
+
+.gemini-actions-row {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.gemini-get-key-btn {
+  text-decoration: none;
+  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}

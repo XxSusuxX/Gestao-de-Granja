@@ -53888,6 +53888,157 @@ function computeSignatureSimilarity(a, b) {
   const cosSim = normA > 0 && normB > 0 ? dot / (Math.sqrt(normA) * Math.sqrt(normB)) : 0;
   return maeSim * 0.65 + cosSim * 0.35;
 }
+async function analyzeWithGeminiVision(imageData, apiKey, existingProductNames) {
+  try {
+    let pureBase64 = imageData;
+    let mimeType = "image/jpeg";
+    if (imageData.startsWith("data:")) {
+      const match = imageData.match(/^data:([^;]+);base64,(.+)$/);
+      if (match) {
+        mimeType = match[1];
+        pureBase64 = match[2];
+      }
+    }
+    const prompt = `Voc\xEA \xE9 o sistema de vis\xE3o computacional da Granja Suenaga (granja av\xEDcola e agropecu\xE1ria).
+Analise com precis\xE3o a foto deste produto, insumo, recipiente ou equipamento.
+
+Produtos j\xE1 cadastrados no estoque da granja:
+${existingProductNames.slice(0, 15).join(", ")}
+
+INSTRU\xC7\xD5ES OBRIGAT\xD3RIAS:
+1. "name": Nome claro, espec\xEDfico e em portugu\xEAs do item fotografado.
+   Exemplos: "Garrafas Pl\xE1sticas / Squeeze", "Bebedouro Tipo Garrafa", "Frasco de Vacina", "Ra\xE7\xE3o Postura", "Milho em Gr\xE3o".
+2. "category": Escolha rigorosamente uma das op\xE7\xF5es abaixo:
+   - "equipment" (se for garrafas, bebedouros, comedouros, l\xE2mpadas, camp\xE2nulas, ferramentas)
+   - "medicine" (se for vacinas, rem\xE9dios, antibi\xF3ticos, vitaminas, ampolas)
+   - "feed" (se for ra\xE7\xE3o, gr\xE3os, milho, soja, calc\xE1rio, n\xFAcleos)
+   - "supplies" (se for embalagens, caixas, cartelas de ovos, maravalha, desinfetantes)
+   - "other" (se n\xE3o se encaixar nas anteriores)
+3. "quantity": CONTAGEM EXATA de itens na imagem:
+   - Se houver 3 garrafas ou frascos vis\xEDveis na imagem, a quantidade DEVE ser 3.
+   - Se for um saco ou embalagem fechada, use o peso/volume indicado no r\xF3tulo (ex: 50 se for saco de 50kg, 500 se for frasco de 500ml). Se n\xE3o houver n\xFAmero, use 1.
+4. "unit":
+   - "un" (se forem objetos ou recipientes contados por unidade, como garrafas, potes, caixas, bebedouros)
+   - "ml" (se for l\xEDquido pequeno, ex: frasco at\xE9 1000ml)
+   - "L" (se for l\xEDquido grande, ex: gal\xE3o de desinfetante)
+   - "g" (se for s\xF3lido pequeno, p\xF3 ou sach\xEA)
+   - "kg" (se for ra\xE7\xE3o, sacos de gr\xE3os ou calc\xE1rio)
+5. "minimumQuantity": SEMPRE 0.
+6. "unitCost": Estimativa de custo unit\xE1rio em Reais (R$), se aplic\xE1vel.
+7. "reason": Frase curta e objetiva em portugu\xEAs explicando o que a IA identificou (ex: "Detectadas 3 garrafas na imagem (3 unidades, Equipamentos).").
+
+Retorne EXCLUSIVAMENTE um objeto JSON v\xE1lido, sem texto adicional ou markdown. Formato:
+{
+  "name": string,
+  "category": "feed" | "medicine" | "supplies" | "equipment" | "other",
+  "unit": "un" | "kg" | "g" | "L" | "ml",
+  "quantity": number,
+  "minimumQuantity": 0,
+  "unitCost": number,
+  "reason": string
+}`;
+    const url2 = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const response = await fetch(url2, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                inlineData: {
+                  mimeType,
+                  data: pureBase64
+                }
+              },
+              {
+                text: prompt
+              }
+            ]
+          }
+        ],
+        generationConfig: {
+          temperature: 0.1,
+          responseMimeType: "application/json"
+        }
+      })
+    });
+    if (!response.ok) {
+      console.warn("Gemini Vision response not OK:", response.status, await response.text());
+      return null;
+    }
+    const json3 = await response.json();
+    const text2 = json3?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text2) return null;
+    const parsed = JSON.parse(text2.trim());
+    return {
+      name: String(parsed.name || "Item Identificado").trim(),
+      category: ["feed", "medicine", "supplies", "equipment", "other"].includes(parsed.category) ? parsed.category : "equipment",
+      unit: String(parsed.unit || "un"),
+      quantity: Number(parsed.quantity) > 0 ? Number(parsed.quantity) : 1,
+      minimumQuantity: 0,
+      unitCost: typeof parsed.unitCost === "number" ? parsed.unitCost : void 0,
+      reason: String(parsed.reason || "Item identificado com Gemini Vision.")
+    };
+  } catch (err) {
+    console.error("Gemini Vision failed:", err);
+    return null;
+  }
+}
+async function analyzeWithOpenAiVision(imageData, apiKey, existingProductNames) {
+  try {
+    const prompt = `Voc\xEA \xE9 o sistema de vis\xE3o computacional da Granja Suenaga.
+Analise a foto deste item de granja e retorne APENAS um JSON:
+{
+  "name": "Nome descritivo",
+  "category": "feed" | "medicine" | "supplies" | "equipment" | "other",
+  "unit": "un" | "kg" | "g" | "L" | "ml",
+  "quantity": <contagem exata ou volume/peso>,
+  "minimumQuantity": 0,
+  "unitCost": <opcional em R$>,
+  "reason": "Explica\xE7\xE3o em portugu\xEAs"
+}
+Regras: se forem garrafas/recipientes conte a quantidade exata (ex: 3 garrafas -> quantity=3, unit="un", category="equipment"). Produtos j\xE1 no banco: ${existingProductNames.slice(0, 10).join(", ")}.`;
+    const url2 = "https://api.openai.com/v1/chat/completions";
+    const response = await fetch(url2, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              { type: "image_url", image_url: { url: imageData } }
+            ]
+          }
+        ],
+        response_format: { type: "json_object" }
+      })
+    });
+    if (!response.ok) return null;
+    const json3 = await response.json();
+    const content = json3?.choices?.[0]?.message?.content;
+    if (!content) return null;
+    const parsed = JSON.parse(content.trim());
+    return {
+      name: String(parsed.name || "Item Identificado").trim(),
+      category: ["feed", "medicine", "supplies", "equipment", "other"].includes(parsed.category) ? parsed.category : "equipment",
+      unit: String(parsed.unit || "un"),
+      quantity: Number(parsed.quantity) > 0 ? Number(parsed.quantity) : 1,
+      minimumQuantity: 0,
+      unitCost: typeof parsed.unitCost === "number" ? parsed.unitCost : void 0,
+      reason: String(parsed.reason || "Item identificado com OpenAI Vision.")
+    };
+  } catch (err) {
+    console.error("OpenAI Vision failed:", err);
+    return null;
+  }
+}
 supabaseRestRouter.post("/inventory/analyze-image", async (req, res) => {
   try {
     const rawSignature = String(req.body?.imageSignature ?? "");
@@ -53896,6 +54047,39 @@ supabaseRestRouter.post("/inventory/analyze-image", async (req, res) => {
     const products = await sbFetch(
       "farm_products?select=*&order=id.desc"
     );
+    const geminiKey = typeof req.body?.geminiApiKey === "string" && req.body.geminiApiKey.trim() || typeof req.headers["x-gemini-api-key"] === "string" && req.headers["x-gemini-api-key"].trim() || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "";
+    const openAiKey = typeof req.body?.openAiApiKey === "string" && req.body.openAiApiKey.trim() || typeof req.headers["x-openai-api-key"] === "string" && req.headers["x-openai-api-key"].trim() || process.env.OPENAI_API_KEY || "";
+    const rawImageData = typeof req.body?.imageData === "string" && req.body.imageData.startsWith("data:") ? req.body.imageData : "";
+    if (rawImageData && (geminiKey || openAiKey)) {
+      const existingNames = products.map((p) => p.name);
+      let visionResult = null;
+      if (geminiKey) {
+        visionResult = await analyzeWithGeminiVision(rawImageData, geminiKey, existingNames);
+      }
+      if (!visionResult && openAiKey) {
+        visionResult = await analyzeWithOpenAiVision(rawImageData, openAiKey, existingNames);
+      }
+      if (visionResult) {
+        const matchInDb = products.find(
+          (p) => p.name.toLowerCase() === visionResult.name.toLowerCase() || p.name.toLowerCase().includes(visionResult.name.toLowerCase()) || visionResult.name.toLowerCase().includes(p.name.toLowerCase())
+        );
+        res.json({
+          matchedInDb: !!matchInDb,
+          similarity: matchInDb ? 95 : 0,
+          matchedProduct: matchInDb ? presentProduct2(matchInDb) : null,
+          suggestion: {
+            name: visionResult.name,
+            category: visionResult.category,
+            unit: visionResult.unit,
+            quantity: visionResult.quantity,
+            minimumQuantity: 0,
+            unitCost: visionResult.unitCost ?? (matchInDb?.unit_cost ? Number(matchInDb.unit_cost) : 12),
+            reason: `\u2728 Vis\xE3o Computacional por IA: ${visionResult.reason}`
+          }
+        });
+        return;
+      }
+    }
     const fn = `${rawFileName} ${sig?.fn ?? ""}`.toLowerCase();
     let detectedQty = null;
     let explicitUnit = null;
@@ -54110,6 +54294,11 @@ supabaseRestRouter.post("/inventory/analyze-image", async (req, res) => {
       keywordHint = "cartela";
       fallbackName = "Cartelas para 30 Ovos";
       fallbackCost = 0.95;
+    } else if (fn.includes("garrafa") || fn.includes("garrafas") || fn.includes("frasco") || fn.includes("frascos") || fn.includes("squeeze") || fn.includes("recipiente") || fn.includes("pote") || fn.includes("potes")) {
+      detectedCategory = "equipment";
+      keywordHint = "garrafa";
+      fallbackName = "Garrafas / Recipientes";
+      fallbackCost = 15;
     } else if (fn.includes("comedouro") || fn.includes("bebedouro") || fn.includes("lampada") || fn.includes("campanula") || fn.includes("equipamento")) {
       detectedCategory = "equipment";
       keywordHint = "comedouro";
@@ -54150,11 +54339,6 @@ supabaseRestRouter.post("/inventory/analyze-image", async (req, res) => {
       keywordHint = "soja";
       fallbackName = "Farelo de Soja";
       fallbackCost = 2.9;
-    } else if (r > 185 && g > 185 && b > 175 && Math.abs(r - b) < 25) {
-      detectedCategory = "feed";
-      keywordHint = "calc\xE1rio";
-      fallbackName = "Calc\xE1rio Calc\xEDtico";
-      fallbackCost = 0.85;
     } else if (std < 38) {
       detectedCategory = "supplies";
       keywordHint = "cartela";
@@ -54234,7 +54418,8 @@ supabaseRestRouter.post("/inventory/analyze-image", async (req, res) => {
     }
     const stateDesc = state === "liquid" ? "l\xEDquido" : state === "solid" ? "s\xF3lido" : "unit\xE1rio";
     const sizeDesc = size === "small" ? "pequeno" : "grande";
-    const dbSuggested = (keywordHint ? products.find((p) => p.name.toLowerCase().includes(keywordHint)) : void 0) ?? products.find((p) => p.category === detectedCategory);
+    const dbSuggested = keywordHint ? products.find((p) => p.name.toLowerCase().includes(keywordHint)) : void 0;
+    const aiTip = "Dica: Para reconhecimento visual autom\xE1tico de qualquer objeto (contagem exata de garrafas, leitura de r\xF3tulos e pesos por IA), utilize uma chave gratuita do Google Gemini!";
     if (dbSuggested) {
       const presented = presentProduct2(dbSuggested);
       let finalUnit = explicitUnit;
@@ -54277,7 +54462,7 @@ supabaseRestRouter.post("/inventory/analyze-image", async (req, res) => {
         minimumQuantity: 0,
         // Inicia em 0 conforme solicitado
         unitCost: fallbackCost,
-        reason: `Item ${stateDesc} (${sizeDesc}) analisado. Unidade definida como '${chosenUnit}', quantidade sugerida: ${chosenQty} e estoque m\xEDnimo iniciado em 0.`
+        reason: `Item ${stateDesc} (${sizeDesc}) analisado. Unidade definida como '${chosenUnit}', quantidade sugerida: ${chosenQty} e estoque m\xEDnimo iniciado em 0. ${aiTip}`
       }
     });
   } catch (err) {
