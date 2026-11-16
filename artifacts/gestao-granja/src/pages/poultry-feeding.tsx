@@ -33,12 +33,36 @@ function useRefresh() {
 }
 
 function FormModal({ title, eyebrow, close, children }: { title: string; eyebrow: string; close: () => void; children: ReactNode }) {
-  return <div className="modal-backdrop" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) close(); }}>
-    <section className="modal" role="dialog" aria-modal="true" aria-label={title} data-testid="dialog-form">
-      <div className="modal-head"><div><div className="eyebrow">{eyebrow}</div><h2>{title}</h2></div><button className="icon-button" aria-label="Fechar" onClick={close} data-testid="button-close-modal"><X size={32} /></button></div>
-      {children}
-    </section>
-  </div>;
+  return (
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onClick={e => {
+        if (e.target === e.currentTarget) close();
+      }}
+    >
+      <section className="modal" role="dialog" aria-modal="true" aria-label={title} data-testid="dialog-form">
+        <div className="modal-head">
+          <div className="modal-head-titles">
+            <div className="eyebrow">{eyebrow}</div>
+            <h2>{title}</h2>
+          </div>
+          <button
+            type="button"
+            className="icon-button modal-close-btn"
+            aria-label="Fechar"
+            onClick={close}
+            data-testid="button-close-modal"
+          >
+            <X size={26} />
+          </button>
+        </div>
+        <div className="modal-body-scroll">
+          {children}
+        </div>
+      </section>
+    </div>
+  );
 }
 
 function PoultryLotForm({ initial, busy, close, save }: { initial?: PoultryLot; busy: boolean; close: () => void; save: (data: { label: string; kind: PoultryLot['kind']; receivedAt: string; source: string; breed: string; ageWeeks?: number; initialCount?: number }) => void }) {

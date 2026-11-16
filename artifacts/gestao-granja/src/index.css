@@ -245,27 +245,31 @@ body,
 
 .swipe-toast-popup {
   position: fixed;
-  bottom: clamp(88px, 12vh, 112px);
+  bottom: calc(72px + env(safe-area-inset-bottom, 8px));
   left: 50%;
   transform: translateX(-50%);
-  z-index: 65;
-  width: min(92vw, 680px);
-  background: #1d392b;
+  z-index: 75;
+  width: min(92vw, 480px);
+  background: #193627;
   color: #fdf9ee;
-  border: 3px solid #dfb968;
-  border-radius: 24px;
-  padding: 16px 22px;
-  box-shadow: 0 20px 50px rgba(15, 32, 23, 0.42);
+  border: 2px solid #dfb968;
+  border-radius: 18px;
+  padding: 10px 14px;
+  box-shadow: 0 16px 40px rgba(12, 28, 20, 0.45);
   display: flex;
   align-items: center;
-  gap: 16px;
-  animation: toastSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  animation: t-toast-rise var(--duration-fast) var(--ease-spring) both;
+  will-change: transform, opacity;
+  box-sizing: border-box;
 }
 
 @keyframes toastSlideUp {
   from {
     opacity: 0;
-    transform: translate(-50%, 24px);
+    transform: translate(-50%, 20px);
   }
   to {
     opacity: 1;
@@ -276,53 +280,74 @@ body,
 .swipe-toast-icon {
   display: flex;
   align-items: center;
-  gap: 2px;
-  background: #2b4f3d;
+  justify-content: center;
+  background: #254b37;
   color: #dfb968;
-  padding: 10px 12px;
-  border-radius: 16px;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: 10px;
   flex: none;
   animation: swayHand 1.6s ease-in-out infinite;
 }
 
 @keyframes swayHand {
-  0%, 100% { transform: translateX(-4px); }
-  50% { transform: translateX(4px); }
+  0%, 100% { transform: translateX(-3px); }
+  50% { transform: translateX(3px); }
 }
 
 .swipe-toast-copy {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
+  line-height: 1.2;
 }
 
-.swipe-toast-copy b {
+.swipe-toast-copy b,
+.swipe-toast-copy strong {
   display: block;
-  font-size: clamp(20px, 2.4vw, 25px);
+  font-size: clamp(14px, 1.8vw, 16px);
   font-weight: 800;
   color: #f6e3b4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .swipe-toast-copy span {
   display: block;
-  font-size: clamp(16px, 1.9vw, 20px);
-  color: #e2ede4;
-  margin-top: 2px;
+  font-size: clamp(12px, 1.4vw, 13px);
+  color: #d8e5db;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
 }
 
 .swipe-toast-close {
-  min-height: 48px;
-  padding: 0 20px;
-  border-radius: 14px;
+  min-height: 36px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
   border: 0;
   background: #dfb968;
   color: #183024;
-  font: 800 clamp(17px, 2vw, 21px) var(--app-font-sans);
+  font: 800 13px var(--app-font-sans);
   cursor: pointer;
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--duration-micro) var(--ease-base), transform var(--duration-micro) var(--ease-base);
 }
 
 .swipe-toast-close:hover {
   background: #eccb7f;
+  transform: scale(1.03);
+}
+
+.swipe-toast-close:active {
+  transform: scale(0.97);
 }
 
 .swipe-hint-pill {
@@ -1307,21 +1332,23 @@ body,
 }
 
 /* ==========================================================================
-   MODALS & FORMS (3X LARGER INPUTS & CHIPS)
+   MODALS & FORMS (BOUNDED, VIEWPORT-AWARE & STICKY HEADER FOR MOBILE)
    ========================================================================== */
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 80;
-  background: rgba(18, 35, 26, 0.72);
+  z-index: 9999;
+  background: rgba(18, 35, 26, 0.75);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  padding: max(16px, env(safe-area-inset-top, 16px)) 16px max(16px, env(safe-area-inset-bottom, 16px)) 16px;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   animation: t-backdrop-fade-in var(--duration-fast) var(--ease-smooth-out) both;
   will-change: opacity, backdrop-filter;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 @keyframes t-backdrop-fade-in {
@@ -1339,16 +1366,21 @@ body,
 
 .modal {
   width: min(100%, 720px);
-  max-height: 94dvh;
-  overflow-y: auto;
+  max-height: min(90dvh, 880px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* Header will NEVER scroll off-screen! */
   background: #faf8f0;
-  border-radius: 26px;
+  border-radius: 24px;
   border: 3px solid #cfd8c7;
   box-shadow: 0 32px 100px rgba(15, 32, 23, 0.45);
-  padding: clamp(20px, 3vh, 32px);
+  margin: auto;
+  padding: 0;
+  position: relative;
   transform-origin: center center;
   animation: t-modal-scale-in var(--duration-fast) var(--ease-smooth-out) both;
   will-change: transform, opacity;
+  box-sizing: border-box;
 }
 
 @keyframes t-modal-scale-in {
@@ -1365,27 +1397,94 @@ body,
 .modal-head {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 18px;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 24px 14px 24px;
+  background: #faf8f0;
+  border-bottom: 2px solid #e2ebd9;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 25;
+}
+
+.modal-head-titles {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .modal-head .eyebrow {
-  font-size: clamp(15px, 1.8vw, 19px);
+  font-size: clamp(13px, 1.6vw, 16px);
   font-weight: 800;
   color: #536e5c;
   letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .modal-head h2 {
-  font: 700 clamp(28px, 3.6vw, 38px)/1.1 var(--app-font-serif);
+  font: 700 clamp(20px, 2.8vw, 32px)/1.15 var(--app-font-serif);
   color: #183526;
-  margin: 4px 0 0;
+  margin: 3px 0 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.modal-close-btn,
+.modal-head .icon-button {
+  flex: 0 0 46px;
+  width: 46px;
+  height: 46px;
+  min-width: 46px;
+  min-height: 46px;
+  border-radius: 13px;
+  border: 2px solid #cbd7c4;
+  background: #edf3e7;
+  color: #1b3827;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background var(--duration-micro) var(--ease-base), transform var(--duration-micro) var(--ease-base);
+  margin-left: auto;
+  box-sizing: border-box;
+}
+
+.modal-close-btn:hover,
+.modal-head .icon-button:hover {
+  background: #deecd5;
+  transform: scale(1.05);
+}
+
+.modal-close-btn:active,
+.modal-head .icon-button:active {
+  transform: scale(0.95);
+}
+
+.modal-close-btn svg,
+.modal-head .icon-button svg {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.modal-body-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 20px 24px 24px 24px;
 }
 
 .modal-form {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  width: 100%;
 }
 
 .field-label {
@@ -1555,11 +1654,12 @@ body,
   color: #5b7162;
 }
 
-.modal-actions {
+.modal-actions,
+.modal-actions-giant {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
-  padding-top: 8px;
+  padding-top: 10px;
 }
 
 .sr-only-input {
@@ -2077,15 +2177,59 @@ body,
     font-size: 12px;
   }
 
-  /* Modals on Mobile */
+  /* Modals on Mobile - Strict bounds & fixed close button */
+  .modal-backdrop {
+    padding: max(8px, env(safe-area-inset-top, 8px)) 8px max(8px, env(safe-area-inset-bottom, 8px)) 8px;
+    align-items: center;
+  }
   .modal {
-    padding: 14px;
+    width: 100%;
+    max-width: calc(100vw - 16px);
+    max-height: calc(100dvh - 20px);
     border-radius: 20px;
-    width: 96vw;
-    max-height: 94dvh;
+    margin: auto;
+    overflow: hidden;
+  }
+  .modal-head {
+    padding: 12px 14px 10px 14px;
+    gap: 10px;
+    background: #faf8f0;
+  }
+  .modal-head .eyebrow {
+    font-size: 11px;
   }
   .modal-head h2 {
-    font-size: 22px;
+    font-size: 19px;
+  }
+  .modal-close-btn,
+  .modal-head .icon-button {
+    flex: 0 0 40px !important;
+    width: 40px !important;
+    height: 40px !important;
+    min-width: 40px !important;
+    min-height: 40px !important;
+    border-radius: 11px !important;
+  }
+  .modal-close-btn svg,
+  .modal-head .icon-button svg {
+    width: 22px !important;
+    height: 22px !important;
+  }
+  .modal-body-scroll {
+    padding: 12px 14px 18px 14px;
+  }
+  .modal-form {
+    gap: 12px;
+  }
+  .modal-actions,
+  .modal-actions-giant {
+    position: sticky;
+    bottom: 0;
+    background: #faf8f0;
+    padding-top: 8px;
+    padding-bottom: 2px;
+    border-top: 2px solid #e6eee0;
+    z-index: 10;
   }
   .field-label {
     font-size: 15px;

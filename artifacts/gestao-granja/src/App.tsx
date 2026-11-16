@@ -295,12 +295,36 @@ function useSystemStatus() {
 }
 
 function Modal({ title, eyebrow, children, onClose }: { title: string; eyebrow: string; children: ReactNode; onClose: () => void }) {
-  return <div className="modal-backdrop" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
-    <section className="modal" role="dialog" aria-modal="true" aria-label={title}>
-      <div className="modal-head"><div><div className="eyebrow">{eyebrow}</div><h2>{title}</h2></div><button className="icon-button" aria-label="Fechar" onClick={onClose}><X size={30} /></button></div>
-      {children}
-    </section>
-  </div>;
+  return (
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onClick={e => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <section className="modal" role="dialog" aria-modal="true" aria-label={title}>
+        <div className="modal-head">
+          <div className="modal-head-titles">
+            <div className="eyebrow">{eyebrow}</div>
+            <h2>{title}</h2>
+          </div>
+          <button
+            type="button"
+            className="icon-button modal-close-btn"
+            aria-label="Fechar"
+            onClick={onClose}
+            data-testid="button-modal-close"
+          >
+            <X size={26} />
+          </button>
+        </div>
+        <div className="modal-body-scroll">
+          {children}
+        </div>
+      </section>
+    </div>
+  );
 }
 
 function LoginScreen({ onAuthenticated }: { onAuthenticated: (user: AuthUser, token: string) => void }) {
@@ -1314,108 +1338,90 @@ function StockScreen() {
       {modal === 'movement' && <Modal title="Registrar Movimento" eyebrow="ESTOQUE · ENTRADA OU SAÍDA" onClose={() => setModal(null)}><MovementForm products={list} preferred={movementPref.direction} initialProductId={movementPref.productId} onClose={() => setModal(null)} busy={createMovement.isPending} onSave={onMovement} /></Modal>}
 
       {showGeminiModal && (
-        <div className="modal-backdrop" onClick={() => setShowGeminiModal(false)}>
-          <div
-            className="modal-card giant-modal gemini-modal-card"
-            onClick={e => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-          >
-            <div className="modal-header">
-              <div className="modal-header-text">
-                <span className="modal-subtitle">INTELIGÊNCIA ARTIFICIAL · VISÃO</span>
-                <h2 className="modal-title">Configurar IA Gemini Vision</h2>
-              </div>
-              <button
-                type="button"
-                className="button icon-btn"
-                onClick={() => setShowGeminiModal(false)}
-                aria-label="Fechar"
-              >
-                <X size={26} />
-              </button>
+        <Modal
+          title="Configurar IA Gemini Vision"
+          eyebrow="INTELIGÊNCIA ARTIFICIAL · VISÃO"
+          onClose={() => setShowGeminiModal(false)}
+        >
+          <div className="gemini-modal-content">
+            <div className="gemini-status-card">
+              {geminiApiKey ? (
+                <p>
+                  🟢 <b>IA Gemini Conectada com Sucesso!</b> Suas fotos de produtos agora são processadas pelo Google Gemini 1.5/2.0 Flash Vision. Ele detecta objetos reais (como 3 garrafas, comedouros, sacaria), conta unidades e lê rótulos automaticamente.
+                </p>
+              ) : (
+                <p>
+                  ⚡ <b>Por que usar a chave de IA?</b> Regras simples de cores não conseguem enxergar objetos reais. Com a chave da IA (100% gratuita no Google AI Studio), o Gemini analisa os pixels, conta as 3 garrafas e preenche o cadastro sozinho em 1 segundo!
+                </p>
+              )}
             </div>
 
-            <div className="gemini-modal-content">
-              <div className="gemini-status-card">
-                {geminiApiKey ? (
-                  <p>
-                    🟢 <b>IA Gemini Conectada com Sucesso!</b> Suas fotos de produtos agora são processadas pelo Google Gemini 1.5/2.0 Flash Vision. Ele detecta objetos reais (como 3 garrafas, comedouros, sacaria), conta unidades e lê rótulos automaticamente.
-                  </p>
-                ) : (
-                  <p>
-                    ⚡ <b>Por que usar a chave de IA?</b> Regras simples de cores não conseguem enxergar objetos reais. Com a chave da IA (100% gratuita no Google AI Studio), o Gemini analisa os pixels, conta as 3 garrafas e preenche o cadastro sozinho em 1 segundo!
-                  </p>
-                )}
-              </div>
+            <label className="field-label">
+              Chave da API do Google Gemini
+              <input
+                type="text"
+                value={tempGeminiKey}
+                onChange={e => setTempGeminiKey(e.target.value)}
+                placeholder="Cole sua chave aqui (começa com AIzaSy...)"
+                className="gemini-key-input"
+                data-testid="input-gemini-key"
+              />
+            </label>
 
-              <label className="field-label">
-                Chave da API do Google Gemini
-                <input
-                  type="text"
-                  value={tempGeminiKey}
-                  onChange={e => setTempGeminiKey(e.target.value)}
-                  placeholder="Cole sua chave aqui (começa com AIzaSy...)"
-                  className="gemini-key-input"
-                  data-testid="input-gemini-key"
-                />
-              </label>
+            <div className="gemini-actions-row">
+              <a
+                href="https://aistudio.google.com/app/apikey"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="button secondary giant-btn gemini-get-key-btn"
+              >
+                🔗 Obter Chave Grátis no Google AI Studio
+              </a>
+            </div>
 
-              <div className="gemini-actions-row">
-                <a
-                  href="https://aistudio.google.com/app/apikey"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="button secondary giant-btn gemini-get-key-btn"
-                >
-                  🔗 Obter Chave Grátis no Google AI Studio
-                </a>
-              </div>
-
-              <div className="modal-actions-giant">
-                {geminiApiKey && (
-                  <button
-                    type="button"
-                    className="button danger giant-btn"
-                    onClick={() => {
-                      localStorage.removeItem(GEMINI_STORAGE_KEY);
-                      setGeminiApiKey('');
-                      setTempGeminiKey('');
-                      setShowGeminiModal(false);
-                    }}
-                  >
-                    Remover
-                  </button>
-                )}
+            <div className="modal-actions-giant">
+              {geminiApiKey && (
                 <button
                   type="button"
-                  className="button secondary giant-btn"
-                  onClick={() => setShowGeminiModal(false)}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  className="button primary giant-btn"
+                  className="button danger giant-btn"
                   onClick={() => {
-                    const clean = tempGeminiKey.trim();
-                    if (clean) {
-                      localStorage.setItem(GEMINI_STORAGE_KEY, clean);
-                      setGeminiApiKey(clean);
-                    } else {
-                      localStorage.removeItem(GEMINI_STORAGE_KEY);
-                      setGeminiApiKey('');
-                    }
+                    localStorage.removeItem(GEMINI_STORAGE_KEY);
+                    setGeminiApiKey('');
+                    setTempGeminiKey('');
                     setShowGeminiModal(false);
                   }}
-                  data-testid="button-save-gemini-key"
                 >
-                  Salvar Chave
+                  Remover
                 </button>
-              </div>
+              )}
+              <button
+                type="button"
+                className="button secondary giant-btn"
+                onClick={() => setShowGeminiModal(false)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="button primary giant-btn"
+                onClick={() => {
+                  const clean = tempGeminiKey.trim();
+                  if (clean) {
+                    localStorage.setItem(GEMINI_STORAGE_KEY, clean);
+                    setGeminiApiKey(clean);
+                  } else {
+                    localStorage.removeItem(GEMINI_STORAGE_KEY);
+                    setGeminiApiKey('');
+                  }
+                  setShowGeminiModal(false);
+                }}
+                data-testid="button-save-gemini-key"
+              >
+                Salvar Chave
+              </button>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );
@@ -1542,20 +1548,25 @@ function SwipeWorkspace({ user, onLogout }: { user: AuthUser; onLogout: () => vo
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
   const [showSwipePopup, setShowSwipePopup] = useState<boolean>(() => {
-    return sessionStorage.getItem('granja_swipe_popup_seen') !== '1';
+    try {
+      return localStorage.getItem('granja_swipe_popup_dismissed_v1') !== '1';
+    } catch {
+      return false;
+    }
   });
 
   const dismissSwipePopup = () => {
-    sessionStorage.setItem('granja_swipe_popup_seen', '1');
+    try {
+      localStorage.setItem('granja_swipe_popup_dismissed_v1', '1');
+    } catch {}
     setShowSwipePopup(false);
   };
 
   useEffect(() => {
     if (!showSwipePopup) return undefined;
     const timer = window.setTimeout(() => {
-      sessionStorage.setItem('granja_swipe_popup_seen', '1');
-      setShowSwipePopup(false);
-    }, 6000);
+      dismissSwipePopup();
+    }, 4500);
     return () => window.clearTimeout(timer);
   }, [showSwipePopup]);
 
@@ -1628,6 +1639,7 @@ function SwipeWorkspace({ user, onLogout }: { user: AuthUser; onLogout: () => vo
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
+    if (showSwipePopup) dismissSwipePopup();
     if (e.touches.length === 1) {
       touchStartX.current = e.touches[0].clientX;
       touchStartY.current = e.touches[0].clientY;
@@ -1691,20 +1703,26 @@ function SwipeWorkspace({ user, onLogout }: { user: AuthUser; onLogout: () => vo
       </header>
 
       {showSwipePopup && (
-        <div className="swipe-toast-popup" role="status" data-testid="popup-swipe-hint">
+        <div
+          className="swipe-toast-popup"
+          role="status"
+          data-testid="popup-swipe-hint"
+          onClick={dismissSwipePopup}
+        >
           <div className="swipe-toast-icon">
-            <ChevronLeft size={26} />
-            <Hand size={28} />
-            <ChevronRight size={26} />
+            <Hand size={20} />
           </div>
           <div className="swipe-toast-copy">
-            <b>Deslize para os lados</b>
-            <span>Arraste o dedo para a esquerda ou direita para mudar de tela</span>
+            <strong>Deslize para navegar</strong>
+            <span>Arraste para os lados para trocar de tela</span>
           </div>
           <button
             type="button"
             className="swipe-toast-close"
-            onClick={dismissSwipePopup}
+            onClick={e => {
+              e.stopPropagation();
+              dismissSwipePopup();
+            }}
             data-testid="button-dismiss-swipe-popup"
           >
             Entendi
