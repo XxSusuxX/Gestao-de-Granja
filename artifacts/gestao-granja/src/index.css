@@ -782,6 +782,53 @@ body,
 }
 
 /* ==========================================================================
+   STOCK SCREEN — ALL PRODUCTS LISTED WITH SMOOTH VERTICAL SCROLL
+   ========================================================================== */
+.scrollable-stock-panel {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  padding-bottom: 32px !important;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(35, 83, 58, 0.3) transparent;
+}
+
+.scrollable-stock-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollable-stock-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollable-stock-panel::-webkit-scrollbar-thumb {
+  background: rgba(35, 83, 58, 0.28);
+  border-radius: 6px;
+}
+
+.scrollable-stock-panel .screen-body {
+  overflow: visible !important;
+  flex: none !important;
+  min-height: min-content !important;
+  height: auto !important;
+}
+
+.scrollable-stock-panel .giant-list {
+  overflow: visible !important;
+  flex: none !important;
+  min-height: min-content !important;
+  height: auto !important;
+  gap: clamp(10px, 1.4vh, 16px);
+}
+
+.scrollable-stock-panel .giant-list-row {
+  flex: none !important;
+  min-height: fit-content !important;
+  height: auto !important;
+}
+
+/* ==========================================================================
    GIANT LISTS & CARDS (STOCK, POULTRY, FEEDING, FINANCE)
    ========================================================================== */
 .giant-list {

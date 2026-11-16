@@ -927,11 +927,8 @@ function StockScreen() {
   const list = products ?? [];
   const filteredProducts = useMemo(() => list.filter(p => filter === 'todos' || p.category === filter), [list, filter]);
 
+  // For movements (histórico): keep pagination
   const perPage = 3;
-  const totalProdPages = Math.max(1, Math.ceil(filteredProducts.length / perPage));
-  const safeProdPage = Math.min(page, totalProdPages - 1);
-  const visibleProducts = filteredProducts.slice(safeProdPage * perPage, (safeProdPage + 1) * perPage);
-
   const allMovements = (movements ?? []).slice().sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
   const totalMovePages = Math.max(1, Math.ceil(allMovements.length / perPage));
   const safeMovePage = Math.min(page, totalMovePages - 1);
@@ -1011,7 +1008,7 @@ function StockScreen() {
   const cats = [['todos', 'Tudo'], ['feed', 'Ração/Grãos'], ['medicine', 'Remédios'], ['supplies', 'Insumos']];
 
   return (
-    <div className="screen-panel">
+    <div className="screen-panel scrollable-stock-panel">
       <input
         ref={quickPhotoInputRef}
         type="file"
@@ -1072,31 +1069,22 @@ function StockScreen() {
           </div>
         )}
 
-        <div className="pager-controls">
-          {subView === 'products' && totalProdPages > 1 && (
-            <>
-              <button type="button" className="pager-btn" disabled={safeProdPage <= 0} onClick={() => setPage(p => Math.max(0, p - 1))}><ChevronLeft size={26} /></button>
-              <span>{safeProdPage + 1} / {totalProdPages}</span>
-              <button type="button" className="pager-btn" disabled={safeProdPage >= totalProdPages - 1} onClick={() => setPage(p => Math.min(totalProdPages - 1, p + 1))}><ChevronRight size={26} /></button>
-            </>
-          )}
-          {subView === 'movements' && totalMovePages > 1 && (
-            <>
-              <button type="button" className="pager-btn" disabled={safeMovePage <= 0} onClick={() => setPage(p => Math.max(0, p - 1))}><ChevronLeft size={26} /></button>
-              <span>{safeMovePage + 1} / {totalMovePages}</span>
-              <button type="button" className="pager-btn" disabled={safeMovePage >= totalMovePages - 1} onClick={() => setPage(p => Math.min(totalMovePages - 1, p + 1))}><ChevronRight size={26} /></button>
-            </>
-          )}
-        </div>
+        {subView === 'movements' && totalMovePages > 1 && (
+          <div className="pager-controls">
+            <button type="button" className="pager-btn" disabled={safeMovePage <= 0} onClick={() => setPage(p => Math.max(0, p - 1))}><ChevronLeft size={26} /></button>
+            <span>{safeMovePage + 1} / {totalMovePages}</span>
+            <button type="button" className="pager-btn" disabled={safeMovePage >= totalMovePages - 1} onClick={() => setPage(p => Math.min(totalMovePages - 1, p + 1))}><ChevronRight size={26} /></button>
+          </div>
+        )}
       </div>
 
       <div className="screen-body">
         {subView === 'products' ? (
           isLoading ? <div className="giant-empty">Carregando estoque…</div> :
           isError ? <div className="giant-empty"><button className="button secondary" onClick={() => { void refetch(); }}>Tentar de novo</button></div> :
-          visibleProducts.length === 0 ? <div className="giant-empty"><p>Nenhum produto nesta categoria.</p><button className="button primary giant-btn" onClick={() => setModal('product')}><Plus size={26} /> Adicionar Produto</button></div> :
+          filteredProducts.length === 0 ? <div className="giant-empty"><p>Nenhum produto nesta categoria.</p><button className="button primary giant-btn" onClick={() => setModal('product')}><Plus size={26} /> Adicionar Produto</button></div> :
           <div className="giant-list">
-            {visibleProducts.map(p => {
+            {filteredProducts.map(p => {
               const low = p.minimumQuantity !== null && p.minimumQuantity > 0 && p.quantity <= p.minimumQuantity;
               return (
                 <article className={`giant-list-row ${low ? 'row-attention' : ''}`} key={p.id} data-testid={`row-product-${p.id}`}>
