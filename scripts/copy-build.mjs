@@ -2,16 +2,30 @@ import fs from "node:fs";
 import path from "node:path";
 
 const src = path.resolve("artifacts/gestao-granja/dist/public");
-const destPublic = path.resolve("public");
-const destDist = path.resolve("dist");
+
+const destinations = [
+  path.resolve("public"),
+  path.resolve("dist"),
+  path.resolve("artifacts/gestao-granja/public"),
+  path.resolve("artifacts/gestao-granja/dist"),
+];
 
 if (fs.existsSync(src)) {
-  fs.mkdirSync(destPublic, { recursive: true });
-  fs.cpSync(src, destPublic, { recursive: true });
-
-  fs.mkdirSync(destDist, { recursive: true });
-  fs.cpSync(src, destDist, { recursive: true });
-  console.log("Successfully copied static build assets to ./public and ./dist!");
+  for (const dest of destinations) {
+    if (dest !== src) {
+      fs.mkdirSync(dest, { recursive: true });
+      fs.cpSync(src, dest, { recursive: true });
+    }
+  }
+  console.log("Successfully copied static build assets to all target directories!");
 } else {
   console.warn("Source directory not found:", src);
+}
+
+// Ensure api directory is also present in artifacts/gestao-granja for safety
+const apiSrc = path.resolve("api");
+const apiDest = path.resolve("artifacts/gestao-granja/api");
+if (fs.existsSync(apiSrc) && apiDest !== apiSrc) {
+  fs.mkdirSync(apiDest, { recursive: true });
+  fs.cpSync(apiSrc, apiDest, { recursive: true });
 }
