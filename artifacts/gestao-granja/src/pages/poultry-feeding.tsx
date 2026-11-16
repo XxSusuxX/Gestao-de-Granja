@@ -7,33 +7,34 @@ import {
   useGetFeedingSummary, getGetFeedingSummaryQueryKey, useGetFeedRecipes, getGetFeedRecipesQueryKey,
   useCreateFeedRecipe, useUpdateFeedRecipe, useDeleteFeedRecipe,
   useGetFeedLogs, getGetFeedLogsQueryKey, useCreateFeedLog, useDeleteFeedLog,
-  useGetProducts, getGetProductsQueryKey,
+  useGetProducts, getGetProductsQueryKey, getGetDashboardQueryKey, getGetMovementsQueryKey,
 } from '@workspace/api-client-react';
 import type { PoultryLot, PoultryMovement, FeedRecipe, FeedLog, Product } from '@workspace/api-client-react';
-import { ArrowDownLeft, ArrowUpRight, Bird, Coins, Egg, Plus, RotateCcw, Trash2, Pencil, Wheat, X } from 'lucide-react';
+import {
+  ArrowDownLeft, ArrowUpRight, Bird, ChevronLeft, ChevronRight, Coins, Egg, Plus,
+  RotateCcw, Trash2, Pencil, Wheat, X,
+} from 'lucide-react';
 
 const cash = (n: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n);
 const day = () => new Date().toISOString().slice(0, 10);
-const shortDate = (s: string) => new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(`${s.slice(0, 10)}T12:00:00`));
-const kindName: Record<string, string> = { layers: 'Poedeiras', broilers: 'Frangos de corte', chicks: 'Pintinhos', other: 'Outras aves' };
+const shortDate = (s: string) => new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(new Date(`${s.slice(0, 10)}T12:00:00`));
+const kindName: Record<string, string> = { layers: 'Poedeiras', broilers: 'Corte', chicks: 'Pintinhos', other: 'Outras' };
 const reasonName: Record<string, string> = { sale: 'Venda', transfer: 'Transferência', mortality: 'Mortalidade', other: 'Outro' };
+const quickLotNames = ['Galpão 1 — Poedeiras', 'Galpão 2 — Corte', 'Pinteiro Novo'];
+const quickBreeds = ['Isa Brown', 'Caipirão', 'Embrapa 051'];
+const quickCounts = [50, 100, 150, 250];
+const quickDispatchCounts = [1, 2, 5, 10, 20];
+const quickFeedKg = [5, 10, 15, 25, 50];
 
 function useRefresh() {
   const qc = useQueryClient();
   return (...keys: ReadonlyArray<readonly unknown[]>) => keys.forEach(queryKey => { void qc.invalidateQueries({ queryKey }); });
 }
 
-function PanelState({ loading, error, retry, empty, children }: { loading: boolean; error: boolean; retry: () => void; empty: boolean; children: ReactNode }) {
-  if (loading) return <div className="skeleton-panel" aria-label="Carregando dados"><div className="skeleton-line wide" /><div className="skeleton-line" /><div className="skeleton-line short" /></div>;
-  if (error) return <div className="empty-state"><div className="empty-mark"><RotateCcw size={21} /></div><h3>Não foi possível carregar</h3><p>Confira a conexão e tente novamente.</p><button className="button secondary" onClick={retry} data-testid="button-retry">Tentar de novo</button></div>;
-  if (empty) return <div className="mini-empty">Ainda não há registros por aqui.</div>;
-  return <>{children}</>;
-}
-
 function FormModal({ title, eyebrow, close, children }: { title: string; eyebrow: string; close: () => void; children: ReactNode }) {
   return <div className="modal-backdrop" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) close(); }}>
     <section className="modal" role="dialog" aria-modal="true" aria-label={title} data-testid="dialog-form">
-      <div className="modal-head"><div><div className="eyebrow">{eyebrow}</div><h2>{title}</h2></div><button className="icon-button" aria-label="Fechar" onClick={close} data-testid="button-close-modal"><X size={19} /></button></div>
+      <div className="modal-head"><div><div className="eyebrow">{eyebrow}</div><h2>{title}</h2></div><button className="icon-button" aria-label="Fechar" onClick={close} data-testid="button-close-modal"><X size={32} /></button></div>
       {children}
     </section>
   </div>;
@@ -49,15 +50,23 @@ function PoultryLotForm({ initial, busy, close, save }: { initial?: PoultryLot; 
   const [count, setCount] = useState(initial?.initialCount.toString() ?? '');
   const choices: PoultryLot['kind'][] = ['layers', 'broilers', 'chicks', 'other'];
   return <form className="modal-form" onSubmit={e => { e.preventDefault(); save({ label: label.trim(), kind, receivedAt, source: source.trim(), breed: breed.trim(), ageWeeks: age ? Number(age) : undefined, initialCount: initial ? undefined : Number(count) }); }}>
-    <label className="field-label">Nome do lote<input autoFocus required value={label} onChange={e => setLabel(e.target.value)} placeholder="Ex.: Galpão 1 — lote de abril" data-testid="input-lot-label" /></label>
-    {!initial && <div className="field-label">Tipo de criação<div className="choice-grid">{choices.map(k => <button type="button" key={k} onClick={() => setKind(k)} className={`choice-pill ${kind === k ? 'selected' : ''}`} data-testid={`choice-lot-${k}`}>{kindName[k]}</button>)}</div></div>}
+    <label className="field-label">Nome do lote<input autoFocus required value={label} onChange={e => setLabel(e.target.value)} placeholder="Ex.: Galpão 1" data-testid="input-lot-label" />
+      {!initial && <div className="suggestion-row">{quickLotNames.map(item => <button type="button" key={item} onClick={() => setLabel(item)} className="suggestion-chip">{item}</button>)}</div>}
+    </label>
+    {!initial && <div className="field-label">Tipo de ave<div className="choice-grid">{choices.map(k => <button type="button" key={k} onClick={() => setKind(k)} className={`choice-pill ${kind === k ? 'selected' : ''}`} data-testid={`choice-lot-${k}`}>{kindName[k]}</button>)}</div></div>}
     <div className="form-row">
-      {!initial && <label className="field-label">Aves recebidas<input required type="number" min="1" step="1" value={count} onChange={e => setCount(e.target.value)} placeholder="Quantidade" data-testid="input-lot-count" /></label>}
-      {!initial && <label className="field-label">Data de chegada<input required type="date" value={receivedAt} onChange={e => setReceivedAt(e.target.value)} data-testid="input-lot-date" /></label>}
-      <label className="field-label">Idade em semanas <span className="optional">opcional</span><input type="number" min="0" step="1" value={age} onChange={e => setAge(e.target.value)} placeholder="Ex.: 8" /></label>
+      {!initial && <label className="field-label">Quantidade de aves<input required type="number" min="1" step="1" value={count} onChange={e => setCount(e.target.value)} placeholder="Qtd" data-testid="input-lot-count" />
+        <div className="suggestion-row">{quickCounts.map(n => <button type="button" key={n} onClick={() => setCount(String(n))} className="suggestion-chip">+{n}</button>)}</div>
+      </label>}
+      {!initial && <label className="field-label">Chegada<input required type="date" value={receivedAt} onChange={e => setReceivedAt(e.target.value)} data-testid="input-lot-date" /></label>}
     </div>
-    <div className="form-row"><label className="field-label">Origem <span className="optional">opcional</span><input value={source} onChange={e => setSource(e.target.value)} placeholder="Fornecedor ou sítio" /></label><label className="field-label">Raça <span className="optional">opcional</span><input value={breed} onChange={e => setBreed(e.target.value)} placeholder="Ex.: Isa Brown" /></label></div>
-    <div className="modal-actions"><button type="button" className="button secondary" onClick={close}>Cancelar</button><button className="button primary" disabled={busy || !label.trim() || (!initial && !count)} data-testid="button-save-lot">{busy ? 'Salvando…' : initial ? 'Salvar alterações' : 'Registrar chegada'}</button></div>
+    <div className="form-row">
+      <label className="field-label">Raça <span className="optional">opcional</span><input value={breed} onChange={e => setBreed(e.target.value)} placeholder="Ex.: Isa Brown" />
+        <div className="suggestion-row">{quickBreeds.map(b => <button type="button" key={b} onClick={() => setBreed(b)} className="suggestion-chip">{b}</button>)}</div>
+      </label>
+      <label className="field-label">Idade (semanas)<input type="number" min="0" step="1" value={age} onChange={e => setAge(e.target.value)} placeholder="Ex.: 8" /></label>
+    </div>
+    <div className="modal-actions"><button type="button" className="button secondary" onClick={close}>Cancelar</button><button className="button primary" disabled={busy || !label.trim() || (!initial && !count)} data-testid="button-save-lot">{busy ? 'Salvando…' : initial ? 'Salvar' : 'Cadastrar Lote'}</button></div>
   </form>;
 }
 
@@ -67,11 +76,19 @@ function DispatchForm({ lot, busy, close, save }: { lot: PoultryLot; busy: boole
   const [reason, setReason] = useState<'sale' | 'transfer' | 'mortality' | 'other'>('sale');
   const [counterparty, setCounterparty] = useState('');
   return <form className="modal-form" onSubmit={e => { e.preventDefault(); save({ quantity: Number(quantity), movementDate, counterparty: counterparty.trim(), reason }); }}>
-    <div className="lot-capacity"><Bird size={18} />{lot.label}<b>{lot.currentCount} aves no lote</b></div>
+    <div className="lot-capacity"><Bird size={28} /><span>{lot.label}</span><b>{lot.currentCount} aves</b></div>
     <div className="field-label">Motivo da saída<div className="choice-grid">{(['sale', 'transfer', 'mortality', 'other'] as const).map(r => <button type="button" key={r} className={`choice-pill ${reason === r ? 'selected' : ''}`} onClick={() => setReason(r)}>{reasonName[r]}</button>)}</div></div>
-    <div className="form-row"><label className="field-label">Quantidade<input required type="number" min="1" max={lot.currentCount} step="1" value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="Quantas aves?" data-testid="input-dispatch-quantity" /></label><label className="field-label">Data<input required type="date" value={movementDate} onChange={e => setDate(e.target.value)} /></label></div>
-    <label className="field-label">{reason === 'sale' ? 'Para quem?' : 'Destino / observação'} <span className="optional">opcional</span><input value={counterparty} onChange={e => setCounterparty(e.target.value)} placeholder="Nome ou anotação curta" /></label>
-    <div className="modal-actions"><button type="button" className="button secondary" onClick={close}>Cancelar</button><button className="button primary" disabled={busy || !quantity || Number(quantity) > lot.currentCount} data-testid="button-save-dispatch">{busy ? 'Registrando…' : 'Registrar saída'}</button></div>
+    <div className="form-row">
+      <label className="field-label">Quantas aves saíram?<input required type="number" min="1" max={lot.currentCount} step="1" value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="Qtd" data-testid="input-dispatch-quantity" />
+        <div className="suggestion-row">
+          {quickDispatchCounts.filter(n => n <= lot.currentCount).map(n => <button type="button" key={n} onClick={() => setQuantity(String(n))} className="suggestion-chip">{n}</button>)}
+          {lot.currentCount > 0 && <button type="button" onClick={() => setQuantity(String(lot.currentCount))} className="suggestion-chip">Todas ({lot.currentCount})</button>}
+        </div>
+      </label>
+      <label className="field-label">Data<input required type="date" value={movementDate} onChange={e => setDate(e.target.value)} /></label>
+    </div>
+    <label className="field-label">Observação / Destino <span className="optional">opcional</span><input value={counterparty} onChange={e => setCounterparty(e.target.value)} placeholder="Comprador ou motivo" /></label>
+    <div className="modal-actions"><button type="button" className="button secondary" onClick={close}>Cancelar</button><button className="button primary" disabled={busy || !quantity || Number(quantity) > lot.currentCount} data-testid="button-save-dispatch">{busy ? 'Salvando…' : 'Confirmar Saída'}</button></div>
   </form>;
 }
 
@@ -87,29 +104,129 @@ export function PoultryPage() {
   const [modal, setModal] = useState<'lot' | 'dispatch' | null>(null);
   const [editing, setEditing] = useState<PoultryLot>();
   const [selectedLot, setSelectedLot] = useState<PoultryLot>();
-  const [history, setHistory] = useState<'recent' | 'all'>('recent');
+  const [subView, setSubView] = useState<'lots' | 'history'>('lots');
+  const [page, setPage] = useState(0);
+
   const lots = lotsQuery.data ?? [];
-  const movements = (movesQuery.data ?? []).slice().sort((a, b) => +new Date(b.movementDate) - +new Date(a.movementDate)).slice(0, history === 'recent' ? 6 : undefined);
+  const movements = (movesQuery.data ?? []).slice().sort((a, b) => +new Date(b.movementDate) - +new Date(a.movementDate));
+
+  const perPage = 2;
+  const totalLotPages = Math.max(1, Math.ceil(lots.length / perPage));
+  const safeLotPage = Math.min(page, totalLotPages - 1);
+  const visibleLots = lots.slice(safeLotPage * perPage, (safeLotPage + 1) * perPage);
+
+  const movesPerPage = 3;
+  const totalMovePages = Math.max(1, Math.ceil(movements.length / movesPerPage));
+  const safeMovePage = Math.min(page, totalMovePages - 1);
+  const visibleMoves = movements.slice(safeMovePage * movesPerPage, (safeMovePage + 1) * movesPerPage);
+
   const saveLot = (d: { label: string; kind: PoultryLot['kind']; receivedAt: string; source: string; breed: string; ageWeeks?: number; initialCount?: number }) => {
     if (editing) updateLot.mutate({ lotId: editing.id, data: { label: d.label, source: d.source || null, breed: d.breed || null, ageWeeks: d.ageWeeks ?? null } }, { onSuccess: () => { refresh(getGetPoultryLotsQueryKey(), getGetPoultrySummaryQueryKey()); setModal(null); setEditing(undefined); } });
     else createLot.mutate({ data: { label: d.label, kind: d.kind, receivedAt: d.receivedAt, source: d.source || undefined, breed: d.breed || undefined, ageWeeks: d.ageWeeks, initialCount: d.initialCount! } }, { onSuccess: () => { refresh(getGetPoultryLotsQueryKey(), getGetPoultrySummaryQueryKey(), getGetPoultryMovementsQueryKey()); setModal(null); } });
   };
   const saveDispatch = (data: { quantity: number; movementDate: string; counterparty: string; reason: 'sale' | 'transfer' | 'mortality' | 'other' }) => selectedLot && dispatch.mutate({ lotId: selectedLot.id, data: { ...data, counterparty: data.counterparty || undefined } }, { onSuccess: () => { refresh(getGetPoultryLotsQueryKey(), getGetPoultrySummaryQueryKey(), getGetPoultryMovementsQueryKey()); setModal(null); setSelectedLot(undefined); } });
   const remove = (m: PoultryMovement) => { if (window.confirm(`Excluir o registro de ${m.quantity} aves?`)) deleteMove.mutate({ movementId: m.id }, { onSuccess: () => refresh(getGetPoultryLotsQueryKey(), getGetPoultrySummaryQueryKey(), getGetPoultryMovementsQueryKey()) }); };
-  const reload = () => { void summary.refetch(); void lotsQuery.refetch(); void movesQuery.refetch(); };
-  return <div className="page-content">
-    <div className="page-heading"><div><div className="eyebrow">CADERNO DO GALINHEIRO</div><h1>As aves da granja</h1><p>Entradas, saídas e lotes num só lugar.</p></div><div className="heading-action"><button className="button primary" onClick={() => { setEditing(undefined); setModal('lot'); }} data-testid="button-new-lot"><Plus size={17} />Novo lote</button></div></div>
-    <section className="flock-hero"><div><span className="hero-kicker"><Egg size={15} /> RETRATO DO PLANTEL</span><h2>Um lote de cada vez.</h2><p>Registre a chegada e acompanhe quantas aves seguem no galinheiro.</p></div><div className="flock-numbers"><div><span>LOTES ATIVOS</span><b data-testid="text-active-lots">{summary.isLoading ? '—' : summary.data?.activeLotCount ?? '—'}</b></div><div><span>AVES NO PLANTEL</span><b data-testid="text-live-birds">{summary.isLoading ? '—' : summary.data?.liveBirdCount ?? '—'}</b></div></div></section>
-    <div className="poultry-layout">
-      <section className="surface-card"><div className="section-title-row"><div><div className="eyebrow">LOTES CADASTRADOS</div><h2>Quem está no galinheiro</h2></div><button className="button secondary compact-button" onClick={() => { setEditing(undefined); setModal('lot'); }}><Plus size={15} />Adicionar</button></div>
-        <PanelState loading={lotsQuery.isLoading || summary.isLoading} error={lotsQuery.isError || summary.isError} retry={reload} empty={!lotsQuery.isLoading && !lotsQuery.isError && !lots.length}>{lots.map(lot => <article className="lot-card" key={lot.id} data-testid={`card-poultry-lot-${lot.id}`}><div className="lot-card-top"><span className="lot-icon"><Bird size={19} /></span><div className="lot-title"><b>{lot.label}</b><small>{kindName[lot.kind]}{lot.breed ? ` · ${lot.breed}` : ''}</small></div><span className="lot-count">{lot.currentCount}<small>aves</small></span></div><div className="lot-meta"><span>Chegaram {shortDate(lot.receivedAt)}</span>{lot.ageWeeks !== null && <span>{lot.ageWeeks} sem.</span>}{lot.source && <span>De {lot.source}</span>}</div><div className="lot-actions"><button className="button secondary" onClick={() => { setSelectedLot(lot); setModal('dispatch'); }} disabled={lot.currentCount <= 0} data-testid={`button-dispatch-${lot.id}`}><ArrowUpRight size={15} />Registrar saída</button><button className="icon-button small-icon" onClick={() => { setEditing(lot); setModal('lot'); }} aria-label={`Editar ${lot.label}`} data-testid={`button-edit-lot-${lot.id}`}><Pencil size={15} /></button></div></article>)}</PanelState>
-      </section>
-      <section className="surface-card flock-history"><div className="section-title-row"><div><div className="eyebrow">CADERNO DE MOVIMENTOS</div><h2>Chegadas e saídas</h2></div><div className="segmented"><button className={history === 'recent' ? 'selected' : ''} onClick={() => setHistory('recent')}>Recentes</button><button className={history === 'all' ? 'selected' : ''} onClick={() => setHistory('all')}>Tudo</button></div></div>
-        <PanelState loading={movesQuery.isLoading} error={movesQuery.isError} retry={() => { void movesQuery.refetch(); }} empty={!movesQuery.isLoading && !movesQuery.isError && !(movesQuery.data ?? []).length}>{movements.map(m => <div className="flock-movement" key={m.id} data-testid={`row-poultry-movement-${m.id}`}><span className={`flock-movement-icon ${m.direction}`}>{m.direction === 'in' ? <ArrowDownLeft size={17} /> : <ArrowUpRight size={17} />}</span><span className="flock-movement-detail"><b>{m.lotLabel}</b><small>{m.direction === 'in' ? 'Chegada' : reasonName[m.reason ?? 'other']}{m.counterparty ? ` · ${m.counterparty}` : ''} · {shortDate(m.movementDate)}</small></span><b className={`flock-quantity ${m.direction}`}>{m.direction === 'in' ? '+' : '−'}{m.quantity}</b><button className="icon-button small-icon danger-icon" aria-label="Excluir movimento" onClick={() => remove(m)} disabled={deleteMove.isPending} data-testid={`button-delete-poultry-movement-${m.id}`}><Trash2 size={15} /></button></div>)}</PanelState>
-      </section>
+
+  return <div className="screen-panel">
+    <div className="screen-header">
+      <div>
+        <span className="screen-kicker"><Egg size={22} /> TELA 3 · AVES DO PLANTEL</span>
+        <h1>Aves no Galinheiro</h1>
+      </div>
+      <div className="screen-header-actions">
+        <div className="big-stat-badge">
+          <span>LOTES</span>
+          <b data-testid="text-active-lots">{summary.data?.activeLotCount ?? 0}</b>
+        </div>
+        <div className="big-stat-badge highlight">
+          <span>AVES VIVAS</span>
+          <b data-testid="text-live-birds">{summary.data?.liveBirdCount ?? 0}</b>
+        </div>
+        <button className="button primary giant-btn" onClick={() => { setEditing(undefined); setModal('lot'); }} data-testid="button-new-lot">
+          <Plus size={26} /> Novo Lote
+        </button>
+      </div>
     </div>
-    {modal === 'lot' && <FormModal title={editing ? 'Editar lote' : 'Registrar chegada'} eyebrow="AVES · LOTE" close={() => { setModal(null); setEditing(undefined); }}><PoultryLotForm key={editing?.id ?? 'new'} initial={editing} busy={createLot.isPending || updateLot.isPending} close={() => { setModal(null); setEditing(undefined); }} save={saveLot} /></FormModal>}
-    {modal === 'dispatch' && selectedLot && <FormModal title="Registrar saída" eyebrow="AVES · MOVIMENTO" close={() => { setModal(null); setSelectedLot(undefined); }}><DispatchForm lot={selectedLot} busy={dispatch.isPending} close={() => { setModal(null); setSelectedLot(undefined); }} save={saveDispatch} /></FormModal>}
+
+    <div className="subview-bar">
+      <div className="segmented-giant">
+        <button type="button" className={subView === 'lots' ? 'selected' : ''} onClick={() => { setSubView('lots'); setPage(0); }}>
+          Lotes ({lots.length})
+        </button>
+        <button type="button" className={subView === 'history' ? 'selected' : ''} onClick={() => { setSubView('history'); setPage(0); }}>
+          Saídas e Chegadas ({movements.length})
+        </button>
+      </div>
+      {subView === 'lots' && totalLotPages > 1 && (
+        <div className="pager-controls">
+          <button type="button" className="pager-btn" disabled={safeLotPage <= 0} onClick={() => setPage(p => Math.max(0, p - 1))}><ChevronLeft size={26} /></button>
+          <span>{safeLotPage + 1} / {totalLotPages}</span>
+          <button type="button" className="pager-btn" disabled={safeLotPage >= totalLotPages - 1} onClick={() => setPage(p => Math.min(totalLotPages - 1, p + 1))}><ChevronRight size={26} /></button>
+        </div>
+      )}
+      {subView === 'history' && totalMovePages > 1 && (
+        <div className="pager-controls">
+          <button type="button" className="pager-btn" disabled={safeMovePage <= 0} onClick={() => setPage(p => Math.max(0, p - 1))}><ChevronLeft size={26} /></button>
+          <span>{safeMovePage + 1} / {totalMovePages}</span>
+          <button type="button" className="pager-btn" disabled={safeMovePage >= totalMovePages - 1} onClick={() => setPage(p => Math.min(totalMovePages - 1, p + 1))}><ChevronRight size={26} /></button>
+        </div>
+      )}
+    </div>
+
+    <div className="screen-body">
+      {subView === 'lots' ? (
+        lotsQuery.isLoading ? <div className="giant-empty">Carregando lotes…</div> :
+        lotsQuery.isError ? <div className="giant-empty"><button className="button secondary" onClick={() => { void lotsQuery.refetch(); }} data-testid="button-retry"><RotateCcw size={24} /> Tentar de novo</button></div> :
+        visibleLots.length === 0 ? <div className="giant-empty"><p>Nenhum lote cadastrado.</p><button className="button primary giant-btn" onClick={() => setModal('lot')}><Plus size={26} /> Cadastrar 1º Lote</button></div> :
+        <div className="giant-cards-grid two-cols">
+          {visibleLots.map(lot => (
+            <article className="giant-lot-card" key={lot.id} data-testid={`card-poultry-lot-${lot.id}`}>
+              <div className="giant-lot-top">
+                <span className="giant-icon-box"><Bird size={32} /></span>
+                <div className="giant-lot-info">
+                  <b>{lot.label}</b>
+                  <span>{kindName[lot.kind]}{lot.breed ? ` · ${lot.breed}` : ''} · Chegou {shortDate(lot.receivedAt)}</span>
+                </div>
+                <div className="giant-lot-count">
+                  <strong>{lot.currentCount}</strong>
+                  <small>de {lot.initialCount} aves</small>
+                </div>
+              </div>
+              <div className="giant-lot-actions">
+                <button className="button secondary giant-action-btn" onClick={() => { setSelectedLot(lot); setModal('dispatch'); }} disabled={lot.currentCount <= 0} data-testid={`button-dispatch-${lot.id}`}>
+                  <ArrowUpRight size={24} /> Dar Saída / Baixa
+                </button>
+                <button className="icon-button giant-icon-btn" onClick={() => { setEditing(lot); setModal('lot'); }} aria-label={`Editar ${lot.label}`} data-testid={`button-edit-lot-${lot.id}`}>
+                  <Pencil size={24} />
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        visibleMoves.length === 0 ? <div className="giant-empty">Nenhuma movimentação registrada.</div> :
+        <div className="giant-list">
+          {visibleMoves.map(m => (
+            <div className="giant-list-row" key={m.id} data-testid={`row-poultry-movement-${m.id}`}>
+              <span className={`giant-dir-badge ${m.direction}`}>
+                {m.direction === 'in' ? <ArrowDownLeft size={26} /> : <ArrowUpRight size={26} />}
+              </span>
+              <div className="giant-row-main">
+                <b>{m.lotLabel}</b>
+                <span>{m.direction === 'in' ? 'Chegada' : reasonName[m.reason ?? 'other']}{m.counterparty ? ` · ${m.counterparty}` : ''} · {shortDate(m.movementDate)}</span>
+              </div>
+              <strong className={`giant-row-val ${m.direction}`}>{m.direction === 'in' ? '+' : '−'}{m.quantity} aves</strong>
+              <button className="icon-button giant-icon-btn danger-icon" aria-label="Excluir movimento" onClick={() => remove(m)} disabled={deleteMove.isPending} data-testid={`button-delete-poultry-movement-${m.id}`}>
+                <Trash2 size={24} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+
+    {modal === 'lot' && <FormModal title={editing ? 'Editar Lote' : 'Novo Lote de Aves'} eyebrow="AVES · PLANTEL" close={() => { setModal(null); setEditing(undefined); }}><PoultryLotForm key={editing?.id ?? 'new'} initial={editing} busy={createLot.isPending || updateLot.isPending} close={() => { setModal(null); setEditing(undefined); }} save={saveLot} /></FormModal>}
+    {modal === 'dispatch' && selectedLot && <FormModal title="Registrar Saída de Aves" eyebrow="AVES · BAIXA" close={() => { setModal(null); setSelectedLot(undefined); }}><DispatchForm lot={selectedLot} busy={dispatch.isPending} close={() => { setModal(null); setSelectedLot(undefined); }} save={saveDispatch} /></FormModal>}
   </div>;
 }
 
@@ -119,12 +236,16 @@ function RecipeForm({ initial, products, busy, close, save }: { initial?: FeedRe
   const addIngredient = (id: number) => setIngredients(old => old.some(i => i.productId === id) ? old : [...old, { productId: id, quantityKg: '' }]);
   const selectedIds = new Set(ingredients.map(i => i.productId));
   return <form className="modal-form" onSubmit={e => { e.preventDefault(); save({ name: name.trim(), ingredients: ingredients.filter(i => Number(i.quantityKg) > 0).map(i => ({ productId: i.productId, quantityKg: Number(i.quantityKg) })) }); }}>
-    <label className="field-label">Nome da receita<input autoFocus required value={name} onChange={e => setName(e.target.value)} placeholder="Ex.: Mistura de postura" data-testid="input-recipe-name" /></label>
-    <div className="field-label">Ingredientes <span className="optional">adicione os produtos do estoque</span>
-      {products.length ? <div className="ingredient-picks">{products.map(p => <button type="button" key={p.id} disabled={selectedIds.has(p.id)} onClick={() => addIngredient(p.id)} data-testid={`button-add-ingredient-${p.id}`}><Plus size={14} />{p.name}<small>{p.quantity} {p.unit}</small></button>)}</div> : <p className="field-hint">Cadastre produtos de alimentação no estoque primeiro.</p>}
+    <label className="field-label">Nome da receita<input autoFocus required value={name} onChange={e => setName(e.target.value)} placeholder="Ex.: Ração Postura" data-testid="input-recipe-name" />
+      {!initial && <div className="suggestion-row">
+        {['Mistura Postura', 'Mistura Engorda', 'Ração Pintinhos'].map(s => <button type="button" key={s} onClick={() => setName(s)} className="suggestion-chip">{s}</button>)}
+      </div>}
+    </label>
+    <div className="field-label">Toque nos ingredientes (em kg)
+      {products.length ? <div className="ingredient-picks">{products.map(p => <button type="button" key={p.id} disabled={selectedIds.has(p.id)} onClick={() => addIngredient(p.id)} data-testid={`button-add-ingredient-${p.id}`}><Plus size={20} />{p.name} ({p.quantity} kg)</button>)}</div> : <p className="field-hint">Cadastre produtos de alimentação em kg no estoque primeiro.</p>}
     </div>
-    {ingredients.map(item => { const p = products.find(x => x.id === item.productId); return <div className="ingredient-line" key={item.productId}><span><b>{p?.name ?? `Produto ${item.productId}`}</b><small>Disponível: {p?.quantity ?? '—'} {p?.unit ?? ''}</small></span><label className="field-label">Quantidade (kg)<input type="number" required min="0.01" step="any" value={item.quantityKg} onChange={e => setIngredients(old => old.map(i => i.productId === item.productId ? { ...i, quantityKg: e.target.value } : i))} placeholder="kg" /></label><button type="button" className="icon-button small-icon danger-icon" aria-label={`Remover ${p?.name ?? 'ingrediente'}`} onClick={() => setIngredients(old => old.filter(i => i.productId !== item.productId))}><X size={15} /></button></div>; })}
-    <div className="modal-actions"><button type="button" className="button secondary" onClick={close}>Cancelar</button><button className="button primary" disabled={busy || !name.trim() || !ingredients.length || ingredients.some(i => !Number(i.quantityKg))} data-testid="button-save-recipe">{busy ? 'Salvando…' : initial ? 'Salvar receita' : 'Salvar receita'}</button></div>
+    {ingredients.map(item => { const p = products.find(x => x.id === item.productId); return <div className="ingredient-line" key={item.productId}><span><b>{p?.name ?? `Item ${item.productId}`}</b><small>Estoque: {p?.quantity ?? '—'} kg</small></span><label className="field-label">Quilos (kg)<input type="number" required min="0.01" step="any" value={item.quantityKg} onChange={e => setIngredients(old => old.map(i => i.productId === item.productId ? { ...i, quantityKg: e.target.value } : i))} placeholder="kg" /></label><button type="button" className="icon-button giant-icon-btn danger-icon" aria-label={`Remover ${p?.name ?? 'ingrediente'}`} onClick={() => setIngredients(old => old.filter(i => i.productId !== item.productId))}><X size={24} /></button></div>; })}
+    <div className="modal-actions"><button type="button" className="button secondary" onClick={close}>Cancelar</button><button className="button primary" disabled={busy || !name.trim() || !ingredients.length || ingredients.some(i => !Number(i.quantityKg))} data-testid="button-save-recipe">{busy ? 'Salvando…' : 'Salvar Receita'}</button></div>
   </form>;
 }
 
@@ -133,13 +254,22 @@ function FeedLogForm({ lots, recipes, busy, close, save }: { lots: PoultryLot[];
   const [recipeId, setRecipe] = useState(recipes[0]?.id ?? 0);
   const [quantity, setQuantity] = useState('');
   const [date, setDate] = useState(day());
+  const selectedRecipe = recipes.find(r => r.id === Number(recipeId));
+  const estimatedCost = selectedRecipe?.costPerKg != null && Number(quantity) > 0 ? selectedRecipe.costPerKg * Number(quantity) : null;
   return <form className="modal-form" onSubmit={e => { e.preventDefault(); save({ lotId: Number(lotId), recipeId: Number(recipeId), quantityKg: Number(quantity), feedingDate: date }); }}>
-    {!lots.length || !recipes.length ? <p className="field-hint">Para registrar o consumo, cadastre um lote de aves e uma receita primeiro.</p> : <>
-      <label className="field-label">Qual lote recebeu a ração?<div className="product-choice-list">{lots.map(l => <button type="button" key={l.id} className={`product-choice ${Number(lotId) === l.id ? 'selected' : ''}`} onClick={() => setLot(l.id)}><span className="product-choice-name">{l.label}</span><span>{l.currentCount} aves</span></button>)}</div></label>
-      <label className="field-label">Qual receita?<div className="product-choice-list">{recipes.map(r => <button type="button" key={r.id} className={`product-choice ${Number(recipeId) === r.id ? 'selected' : ''}`} onClick={() => setRecipe(r.id)}><span className="product-choice-name">{r.name}</span><span>{r.costPerKg !== null ? `${cash(r.costPerKg)}/kg` : `${r.batchWeightKg} kg por lote`}</span></button>)}</div></label>
-      <div className="form-row"><label className="field-label">Quantidade usada<input type="number" required min="0.01" step="any" value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="kg" data-testid="input-feed-quantity" /></label><label className="field-label">Data<input type="date" required value={date} onChange={e => setDate(e.target.value)} /></label></div>
+    {!lots.length || !recipes.length ? <p className="field-hint">Cadastre um lote ativo e uma receita de ração primeiro.</p> : <>
+      <label className="field-label">1. Escolha o lote<div className="product-choice-list">{lots.map(l => <button type="button" key={l.id} className={`product-choice ${Number(lotId) === l.id ? 'selected' : ''}`} onClick={() => setLot(l.id)}><span className="product-choice-name">{l.label}</span><span>{l.currentCount} aves</span></button>)}</div></label>
+      <label className="field-label">2. Escolha a ração<div className="product-choice-list">{recipes.map(r => <button type="button" key={r.id} className={`product-choice ${Number(recipeId) === r.id ? 'selected' : ''}`} onClick={() => setRecipe(r.id)}><span className="product-choice-name">{r.name}</span><span>{r.costPerKg !== null ? `${cash(r.costPerKg)}/kg` : `${r.batchWeightKg} kg`}</span></button>)}</div></label>
+      <div className="form-row">
+        <label className="field-label">3. Quantos quilos (kg)?<input type="number" required min="0.01" step="any" value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="kg" data-testid="input-feed-quantity" />
+          <div className="suggestion-row">{quickFeedKg.map(kg => <button type="button" key={kg} onClick={() => setQuantity(String(kg))} className="suggestion-chip">{kg} kg</button>)}</div>
+        </label>
+        <label className="field-label">Data<input type="date" required value={date} onChange={e => setDate(e.target.value)} />
+          {estimatedCost !== null && <span className="field-hint">Custo: <b>{cash(estimatedCost)}</b></span>}
+        </label>
+      </div>
     </>}
-    <div className="modal-actions"><button type="button" className="button secondary" onClick={close}>Cancelar</button><button className="button primary" disabled={busy || !lots.length || !recipes.length || !quantity} data-testid="button-save-feed-log">{busy ? 'Registrando…' : 'Registrar consumo'}</button></div>
+    <div className="modal-actions"><button type="button" className="button secondary" onClick={close}>Cancelar</button><button className="button primary" disabled={busy || !lots.length || !recipes.length || !quantity} data-testid="button-save-feed-log">{busy ? 'Salvando…' : 'Confirmar Trato'}</button></div>
   </form>;
 }
 
@@ -157,35 +287,131 @@ export function FeedingPage() {
   const refresh = useRefresh();
   const [modal, setModal] = useState<'recipe' | 'log' | null>(null);
   const [editing, setEditing] = useState<FeedRecipe>();
+  const [subView, setSubView] = useState<'recipes' | 'logs'>('recipes');
+  const [page, setPage] = useState(0);
+
   const recipes = recipesQuery.data ?? [];
   const logs = (logsQuery.data ?? []).slice().sort((a, b) => +new Date(b.feedingDate) - +new Date(a.feedingDate));
+
+  const perPage = 2;
+  const totalRecipePages = Math.max(1, Math.ceil(recipes.length / perPage));
+  const safeRecipePage = Math.min(page, totalRecipePages - 1);
+  const visibleRecipes = recipes.slice(safeRecipePage * perPage, (safeRecipePage + 1) * perPage);
+
+  const logsPerPage = 3;
+  const totalLogPages = Math.max(1, Math.ceil(logs.length / logsPerPage));
+  const safeLogPage = Math.min(page, totalLogPages - 1);
+  const visibleLogs = logs.slice(safeLogPage * logsPerPage, (safeLogPage + 1) * logsPerPage);
+
   const invalidateRecipe = () => refresh(getGetFeedRecipesQueryKey(), getGetProductsQueryKey());
   const saveRecipe = (d: { name: string; ingredients: { productId: number; quantityKg: number }[] }) => {
     if (editing) updateRecipe.mutate({ recipeId: editing.id, data: d }, { onSuccess: () => { invalidateRecipe(); setModal(null); setEditing(undefined); } });
     else createRecipe.mutate({ data: d }, { onSuccess: () => { invalidateRecipe(); setModal(null); } });
   };
-  const saveLog = (d: { lotId: number; recipeId: number; quantityKg: number; feedingDate: string }) => createLog.mutate({ data: d }, { onSuccess: () => { refresh(getGetFeedLogsQueryKey(), getGetFeedingSummaryQueryKey(), getGetFeedRecipesQueryKey(), getGetProductsQueryKey()); setModal(null); } });
+  const saveLog = (d: { lotId: number; recipeId: number; quantityKg: number; feedingDate: string }) => createLog.mutate({ data: d }, { onSuccess: () => { refresh(getGetFeedLogsQueryKey(), getGetFeedingSummaryQueryKey(), getGetFeedRecipesQueryKey(), getGetProductsQueryKey(), getGetMovementsQueryKey(), getGetDashboardQueryKey()); setModal(null); } });
   const removeRecipe = (r: FeedRecipe) => { if (window.confirm(`Excluir a receita “${r.name}”?`)) deleteRecipe.mutate({ recipeId: r.id }, { onSuccess: invalidateRecipe }); };
-  const removeLog = (l: FeedLog) => { if (window.confirm(`Excluir o consumo de ${l.quantityKg} kg?`)) deleteLog.mutate({ logId: l.id }, { onSuccess: () => refresh(getGetFeedLogsQueryKey(), getGetFeedingSummaryQueryKey(), getGetFeedRecipesQueryKey(), getGetProductsQueryKey()) }); };
-  const retry = () => { void summary.refetch(); void recipesQuery.refetch(); void logsQuery.refetch(); };
-  return <div className="page-content">
-    <div className="page-heading"><div><div className="eyebrow">CADERNO DE ALIMENTAÇÃO</div><h1>Ração, do jeito certo</h1><p>Receitas, consumo por lote e custo sem fazer conta no papel.</p></div><div className="heading-action"><button className="button secondary" onClick={() => setModal('log')} data-testid="button-new-feed-log"><Wheat size={16} />Anotar consumo</button><button className="button primary" onClick={() => { setEditing(undefined); setModal('recipe'); }} data-testid="button-new-recipe"><Plus size={17} />Nova receita</button></div></div>
-    {summary.isError && <div className="query-warning" role="alert" data-testid="status-feeding-summary-error">O resumo do consumo não carregou. <button onClick={() => { void summary.refetch(); }} data-testid="button-retry-feeding-summary">Tentar novamente</button></div>}
-    <div className="feeding-banner"><div className="feed-banner-copy"><span className="hero-kicker"><Wheat size={15} /> CUIDADO DE TODO DIA</span><h2>Alimentar bem começa<br />com uma boa anotação.</h2><p>Veja o que cada lote consumiu e quanto isso representa.</p></div><div className="feeding-stats">
-      <div><span>CONSUMO HOJE</span><b>{summary.isLoading ? '—' : `${(summary.data?.todayQuantityKg ?? 0).toLocaleString('pt-BR')} kg`}</b><small>{summary.data?.logsToday ?? 0} registros</small></div>
-      <div><span>CUSTO DE HOJE</span><b>{summary.isLoading ? '—' : summary.data?.todayCost === null || summary.data?.todayCost === undefined ? '—' : cash(summary.data.todayCost)}</b><small>com custo conhecido</small></div>
-      <div><span>CUSTO NO MÊS</span><b>{summary.isLoading ? '—' : summary.data?.monthCost === null || summary.data?.monthCost === undefined ? '—' : cash(summary.data.monthCost)}</b><small>consumo registrado</small></div>
-    </div></div>
-    <div className="feeding-columns">
-      <section className="surface-card recipe-section"><div className="section-title-row"><div><div className="eyebrow">MISTURAS DA GRANJA</div><h2>Receitas de ração</h2></div><button className="icon-add-button" onClick={() => { setEditing(undefined); setModal('recipe'); }} aria-label="Nova receita" data-testid="button-add-recipe"><Plus size={19} /></button></div>
-        <PanelState loading={recipesQuery.isLoading} error={recipesQuery.isError} retry={retry} empty={!recipesQuery.isLoading && !recipesQuery.isError && !recipes.length}>{recipes.map(r => <article className="recipe-card" key={r.id} data-testid={`card-recipe-${r.id}`}><div className="recipe-card-head"><span className="recipe-mark"><Wheat size={18} /></span><div><b>{r.name}</b><small>{r.batchWeightKg.toLocaleString('pt-BR')} kg por mistura</small></div><div className="recipe-actions"><button className="icon-button small-icon" aria-label={`Editar ${r.name}`} onClick={() => { setEditing(r); setModal('recipe'); }} data-testid={`button-edit-recipe-${r.id}`}><Pencil size={15} /></button><button className="icon-button small-icon danger-icon" aria-label={`Excluir ${r.name}`} onClick={() => removeRecipe(r)} disabled={deleteRecipe.isPending} data-testid={`button-delete-recipe-${r.id}`}><Trash2 size={15} /></button></div></div><div className="recipe-ingredients">{r.ingredients.map(i => <span key={i.productId}>{i.productName}<b>{i.quantityKg.toLocaleString('pt-BR')} kg</b></span>)}</div><div className="recipe-cost"><span><Coins size={14} /> Custo da mistura</span><b>{r.costPerBatch === null ? 'Sem custo informado' : `${cash(r.costPerBatch)} por lote`} {r.costPerKg !== null && <small>· {cash(r.costPerKg)}/kg</small>}</b></div></article>)}</PanelState>
-        {recipes.length > 0 && <div className="recipe-footnote">O custo usa o valor por unidade cadastrado nos produtos do estoque.</div>}
-      </section>
-      <section className="surface-card logs-section"><div className="section-title-row"><div><div className="eyebrow">HISTÓRICO DE CONSUMO</div><h2>O que foi servido</h2></div><button className="button secondary compact-button" onClick={() => setModal('log')}><Plus size={15} />Anotar</button></div>
-        <PanelState loading={logsQuery.isLoading} error={logsQuery.isError} retry={() => { void logsQuery.refetch(); }} empty={!logsQuery.isLoading && !logsQuery.isError && !logs.length}>{logs.map(log => <article className="feed-log-row" key={log.id} data-testid={`row-feed-log-${log.id}`}><span className="feed-log-icon"><Wheat size={17} /></span><span className="feed-log-copy"><b>{log.lotLabel}</b><small>{log.recipeName} · {shortDate(log.feedingDate)}</small></span><span className="feed-log-total"><b>{log.quantityKg.toLocaleString('pt-BR')} kg</b><small>{log.totalCost === null ? 'Custo indisponível' : cash(log.totalCost)}</small></span><button className="icon-button small-icon danger-icon" aria-label="Excluir consumo" onClick={() => removeLog(log)} disabled={deleteLog.isPending} data-testid={`button-delete-feed-log-${log.id}`}><Trash2 size={15} /></button></article>)}</PanelState>
-      </section>
+  const removeLog = (l: FeedLog) => { if (window.confirm(`Excluir o consumo de ${l.quantityKg} kg?`)) deleteLog.mutate({ logId: l.id }, { onSuccess: () => refresh(getGetFeedLogsQueryKey(), getGetFeedingSummaryQueryKey(), getGetFeedRecipesQueryKey(), getGetProductsQueryKey(), getGetMovementsQueryKey(), getGetDashboardQueryKey()) }); };
+
+  return <div className="screen-panel">
+    <div className="screen-header">
+      <div>
+        <span className="screen-kicker"><Wheat size={22} /> TELA 4 · RAÇÃO E TRATO</span>
+        <h1>Alimentação Diária</h1>
+      </div>
+      <div className="screen-header-actions">
+        <div className="big-stat-badge">
+          <span>HOJE</span>
+          <b>{(summary.data?.todayQuantityKg ?? 0).toLocaleString('pt-BR')} kg</b>
+        </div>
+        <div className="big-stat-badge highlight">
+          <span>CUSTO MÊS</span>
+          <b>{summary.data?.monthCost == null ? '—' : cash(summary.data.monthCost)}</b>
+        </div>
+        <button className="button secondary giant-btn" onClick={() => setModal('log')} data-testid="button-new-feed-log">
+          <Wheat size={24} /> Servir Ração
+        </button>
+        <button className="button primary giant-btn" onClick={() => { setEditing(undefined); setModal('recipe'); }} data-testid="button-new-recipe">
+          <Plus size={24} /> Nova Receita
+        </button>
+      </div>
     </div>
-    {modal === 'recipe' && <FormModal title={editing ? 'Editar receita' : 'Nova receita'} eyebrow="ALIMENTAÇÃO · MISTURA" close={() => { setModal(null); setEditing(undefined); }}><RecipeForm key={editing?.id ?? 'new'} initial={editing} products={(productsQuery.data ?? []).filter(p => p.category === 'feed')} busy={createRecipe.isPending || updateRecipe.isPending} close={() => { setModal(null); setEditing(undefined); }} save={saveRecipe} /></FormModal>}
-    {modal === 'log' && <FormModal title="Anotar consumo" eyebrow="ALIMENTAÇÃO · REGISTRO" close={() => setModal(null)}><FeedLogForm lots={(lotsQuery.data ?? []).filter(l => l.currentCount > 0)} recipes={recipes} busy={createLog.isPending} close={() => setModal(null)} save={saveLog} /></FormModal>}
+
+    <div className="subview-bar">
+      <div className="segmented-giant">
+        <button type="button" className={subView === 'recipes' ? 'selected' : ''} onClick={() => { setSubView('recipes'); setPage(0); }}>
+          Receitas de Ração ({recipes.length})
+        </button>
+        <button type="button" className={subView === 'logs' ? 'selected' : ''} onClick={() => { setSubView('logs'); setPage(0); }}>
+          Consumo Diário ({logs.length})
+        </button>
+      </div>
+      {subView === 'recipes' && totalRecipePages > 1 && (
+        <div className="pager-controls">
+          <button type="button" className="pager-btn" disabled={safeRecipePage <= 0} onClick={() => setPage(p => Math.max(0, p - 1))}><ChevronLeft size={26} /></button>
+          <span>{safeRecipePage + 1} / {totalRecipePages}</span>
+          <button type="button" className="pager-btn" disabled={safeRecipePage >= totalRecipePages - 1} onClick={() => setPage(p => Math.min(totalRecipePages - 1, p + 1))}><ChevronRight size={26} /></button>
+        </div>
+      )}
+      {subView === 'logs' && totalLogPages > 1 && (
+        <div className="pager-controls">
+          <button type="button" className="pager-btn" disabled={safeLogPage <= 0} onClick={() => setPage(p => Math.max(0, p - 1))}><ChevronLeft size={26} /></button>
+          <span>{safeLogPage + 1} / {totalLogPages}</span>
+          <button type="button" className="pager-btn" disabled={safeLogPage >= totalLogPages - 1} onClick={() => setPage(p => Math.min(totalLogPages - 1, p + 1))}><ChevronRight size={26} /></button>
+        </div>
+      )}
+    </div>
+
+    <div className="screen-body">
+      {subView === 'recipes' ? (
+        visibleRecipes.length === 0 ? <div className="giant-empty"><p>Nenhuma receita cadastrada.</p><button className="button primary giant-btn" onClick={() => setModal('recipe')}><Plus size={26} /> Criar 1ª Receita</button></div> :
+        <div className="giant-cards-grid two-cols">
+          {visibleRecipes.map(r => (
+            <article className="giant-lot-card" key={r.id} data-testid={`card-recipe-${r.id}`}>
+              <div className="giant-lot-top">
+                <span className="giant-icon-box amber"><Wheat size={30} /></span>
+                <div className="giant-lot-info">
+                  <b>{r.name}</b>
+                  <span>{r.batchWeightKg.toLocaleString('pt-BR')} kg por batida · {r.costPerKg !== null ? `${cash(r.costPerKg)}/kg` : 'Sem custo'}</span>
+                </div>
+                <div className="giant-lot-actions-inline">
+                  <button className="icon-button giant-icon-btn" aria-label={`Editar ${r.name}`} onClick={() => { setEditing(r); setModal('recipe'); }} data-testid={`button-edit-recipe-${r.id}`}><Pencil size={24} /></button>
+                  <button className="icon-button giant-icon-btn danger-icon" aria-label={`Excluir ${r.name}`} onClick={() => removeRecipe(r)} disabled={deleteRecipe.isPending} data-testid={`button-delete-recipe-${r.id}`}><Trash2 size={24} /></button>
+                </div>
+              </div>
+              <div className="giant-ingredients-wrap">
+                {r.ingredients.map(i => <span key={i.productId} className="giant-ing-pill">{i.productName}: <b>{i.quantityKg} kg</b></span>)}
+              </div>
+              <div className="giant-recipe-foot">
+                <Coins size={22} />
+                <b>{r.costPerBatch === null ? 'Informe o preço nos produtos' : `Custo da batida: ${cash(r.costPerBatch)}`}</b>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        visibleLogs.length === 0 ? <div className="giant-empty"><p>Nenhum trato registrado.</p><button className="button primary giant-btn" onClick={() => setModal('log')}><Wheat size={26} /> Registrar Consumo</button></div> :
+        <div className="giant-list">
+          {visibleLogs.map(log => (
+            <article className="giant-list-row" key={log.id} data-testid={`row-feed-log-${log.id}`}>
+              <span className="giant-dir-badge in"><Wheat size={26} /></span>
+              <div className="giant-row-main">
+                <b>{log.lotLabel}</b>
+                <span>{log.recipeName} · {shortDate(log.feedingDate)}</span>
+              </div>
+              <div className="giant-row-right">
+                <strong>{log.quantityKg.toLocaleString('pt-BR')} kg</strong>
+                <small>{log.totalCost === null ? '—' : cash(log.totalCost)}</small>
+              </div>
+              <button className="icon-button giant-icon-btn danger-icon" aria-label="Excluir consumo" onClick={() => removeLog(log)} disabled={deleteLog.isPending} data-testid={`button-delete-feed-log-${log.id}`}>
+                <Trash2 size={24} />
+              </button>
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
+
+    {modal === 'recipe' && <FormModal title={editing ? 'Editar Receita' : 'Nova Receita de Ração'} eyebrow="RAÇÃO · FÓRMULA" close={() => { setModal(null); setEditing(undefined); }}><RecipeForm key={editing?.id ?? 'new'} initial={editing} products={(productsQuery.data ?? []).filter(p => p.category === 'feed' && p.unit.toLowerCase() === 'kg')} busy={createRecipe.isPending || updateRecipe.isPending} close={() => { setModal(null); setEditing(undefined); }} save={saveRecipe} /></FormModal>}
+    {modal === 'log' && <FormModal title="Servir Ração ao Lote" eyebrow="RAÇÃO · CONSUMO" close={() => setModal(null)}><FeedLogForm lots={(lotsQuery.data ?? []).filter(l => l.currentCount > 0)} recipes={recipes} busy={createLog.isPending} close={() => setModal(null)} save={saveLog} /></FormModal>}
   </div>;
 }

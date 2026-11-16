@@ -1,103 +1,235 @@
-import { type ReactNode, useMemo, useState } from 'react';
-import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Activity, ArrowDownLeft, ArrowLeftRight, ArrowUpRight, CalendarDays, Check, ChevronRight,
-  CircleDollarSign, ClipboardList, Coins, CreditCard, Egg, Layers3, Leaf, Menu, Package,
-  Plus, Search, Sprout, Trash2, TrendingDown, TrendingUp, Wallet, X, Pencil, AlertTriangle,
-  RotateCcw,
+  ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Check, ChevronLeft, ChevronRight,
+  CircleDollarSign, CreditCard, Database, Egg, Leaf, Lock, LogOut, Package,
+  Plus, Sprout, Trash2, TrendingDown, TrendingUp, UserCheck, UserPlus, Wallet, X, Pencil, AlertTriangle,
+  RotateCcw, Bird, Wheat, Hand,
 } from 'lucide-react';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import {
+  setAuthTokenGetter,
   useGetDashboard, getGetDashboardQueryKey, useGetProducts, getGetProductsQueryKey,
   useCreateProduct, useUpdateProduct, useDeleteProduct, useGetMovements,
   getGetMovementsQueryKey, useCreateMovement, useDeleteMovement, useGetFinanceEntries,
   getGetFinanceEntriesQueryKey, useCreateFinanceEntry, useUpdateFinanceEntry,
-  useDeleteFinanceEntry,
+  useDeleteFinanceEntry, useGetPoultrySummary,
+  useGetFeedingSummary, getGetFeedRecipesQueryKey,
 } from '@workspace/api-client-react';
 import type { Product, Movement, FinanceEntry } from '@workspace/api-client-react';
-import { Link, Route, Switch, Router as WouterRouter, useLocation } from 'wouter';
-import NotFound from '@/pages/not-found';
+import { Router as WouterRouter, useLocation } from 'wouter';
 import { PoultryPage, FeedingPage } from '@/pages/poultry-feeding';
 
-const queryClient = new QueryClient();
+const AUTH_STORAGE_KEY = 'granja_suenaga_token';
+const AUTH_USER_KEY = 'granja_suenaga_user';
+
+setAuthTokenGetter(() => localStorage.getItem(AUTH_STORAGE_KEY));
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
+
+interface AuthUser {
+  id: number;
+  username: string;
+  displayName: string;
+  role: string;
+}
+
+type SystemStatus = {
+  mode: 'supabase' | 'demo';
+  connected: boolean;
+  provider: string;
+  hasDatabaseUrl: boolean;
+  error: string | null;
+};
 
 const categoryNames: Record<string, string> = {
   feed: 'Alimentação', medicine: 'Remédios', supplies: 'Insumos',
   equipment: 'Equipamentos', other: 'Outros',
 };
-const quickProducts = ['Ração', 'Milho', 'Soja', 'Núcleo', 'Sal', 'Calcário', 'Remédios'];
-const financeCategories = ['Ração e alimentação', 'Remédios', 'Insumos', 'Equipamentos', 'Venda de ovos', 'Outros'];
+const quickProducts = ['Ração Postura', 'Milho em Grão', 'Farelo de Soja', 'Núcleo Postura', 'Calcário', 'Vacina'];
+const financeCategories = ['Venda de ovos', 'Ração e alimentação', 'Remédios', 'Insumos', 'Equipamentos', 'Outros'];
+const quickFinancePayable = ['Compra de milho', 'Compra de soja', 'Compra de ração', 'Conta de luz'];
+const quickFinanceReceivable = ['Venda de ovos', 'Venda na feira', 'Venda de frangos'];
+const quickQuantities = [5, 10, 25, 50, 100];
+const quickAmounts = [50, 100, 250, 500];
+
 const money = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 const dateBR = (value: string) => new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(new Date(`${value.slice(0, 10)}T12:00:00`));
 const today = () => new Date().toISOString().slice(0, 10);
+const addDaysToToday = (days: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+};
 
-function Shell({ children }: { children: ReactNode }) {
-  const [location] = useLocation();
-  const [mobileMenu, setMobileMenu] = useState(false);
-  const active = location === '/estoque' ? 'estoque' : location === '/contas' ? 'contas' : location === '/aves' ? 'aves' : location === '/alimentacao' ? 'alimentacao' : 'inicio';
-  const nav = [
-    { id: 'inicio', href: '/', label: 'Visão geral', icon: Sprout },
-    { id: 'estoque', href: '/estoque', label: 'Estoque', icon: Package },
-    { id: 'aves', href: '/aves', label: 'Aves', icon: Egg },
-    { id: 'alimentacao', href: '/alimentacao', label: 'Alimentação', icon: Leaf },
-    { id: 'contas', href: '/contas', label: 'Contas', icon: Wallet },
-  ];
-  return <div className="app-shell">
-    <aside className={`sidebar ${mobileMenu ? 'sidebar-open' : ''}`}>
-      <Link href="/" className="brand" onClick={() => setMobileMenu(false)}>
-        <span className="brand-mark"><Egg size={21} strokeWidth={1.8} /></span>
-        <span><strong>granja</strong><small>caderno do dia a dia</small></span>
-      </Link>
-      <div className="farm-label">MINHA GRANJA</div>
-      <nav className="side-nav" aria-label="Navegação principal">
-        {nav.map(({ id, href, label, icon: Icon }) => <Link key={id} href={href} className={`nav-item ${active === id ? 'active' : ''}`} onClick={() => setMobileMenu(false)} data-testid={`link-${id}`}>
-          <Icon size={19} strokeWidth={1.8} /><span>{label}</span>{active === id && <span className="nav-active-dot" />}
-        </Link>)}
-      </nav>
-      <div className="sidebar-note">
-        <div className="note-icon"><Leaf size={16} /></div>
-        <p>Um registro de cada vez.<br /><b>A rotina fica mais leve.</b></p>
-      </div>
-      <div className="sidebar-bottom"><span className="sun-dot" />Feito para a vida no campo</div>
-    </aside>
-    {mobileMenu && <button className="mobile-scrim" aria-label="Fechar menu" onClick={() => setMobileMenu(false)} />}
-    <main className="main-area">
-      <header className="topbar">
-        <button className="icon-button mobile-menu-button" aria-label="Abrir menu" onClick={() => setMobileMenu(!mobileMenu)}><Menu size={21} /></button>
-        <div className="breadcrumb">Minha granja <ChevronRight size={14} /> <span>{nav.find(n => n.id === active)?.label}</span></div>
-        <div className="today-chip"><CalendarDays size={15} />{new Intl.DateTimeFormat('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' }).format(new Date())}</div>
-      </header>
-      <div className="page-wrap">{children}</div>
-    </main>
-    <nav className="mobile-bottom-nav" aria-label="Navegação móvel">
-      {nav.map(({ id, href, label, icon: Icon }) => <Link key={id} href={href} className={active === id ? 'mobile-active' : ''} data-testid={`mobile-link-${id}`}><Icon size={20} /><span>{label}</span></Link>)}
-    </nav>
-  </div>;
-}
-
-function PageHeading({ eyebrow, title, subtitle, action }: { eyebrow: string; title: string; subtitle: string; action?: ReactNode }) {
-  return <div className="page-heading"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1><p>{subtitle}</p></div>{action && <div className="heading-action">{action}</div>}</div>;
-}
-
-function LoadingPanel() {
-  return <div className="skeleton-panel" aria-label="Carregando"><div className="skeleton-line wide" /><div className="skeleton-line" /><div className="skeleton-line short" /></div>;
-}
-function ErrorPanel({ retry }: { retry: () => void }) {
-  return <div className="empty-state"><div className="empty-mark"><RotateCcw size={22} /></div><h3>Não foi possível carregar</h3><p>Confira sua conexão e tente novamente.</p><button className="button secondary" onClick={retry}>Tentar de novo</button></div>;
-}
-function EmptyState({ title, text, action }: { title: string; text: string; action?: ReactNode }) {
-  return <div className="empty-state"><div className="empty-mark"><ClipboardList size={23} /></div><h3>{title}</h3><p>{text}</p>{action}</div>;
+function useSystemStatus() {
+  return useQuery<SystemStatus>({
+    queryKey: ['/api/system/status'],
+    queryFn: async () => {
+      const res = await fetch('/api/system/status');
+      if (!res.ok) throw new Error('Falha ao consultar status');
+      return res.json() as Promise<SystemStatus>;
+    },
+    staleTime: 30000,
+  });
 }
 
 function Modal({ title, eyebrow, children, onClose }: { title: string; eyebrow: string; children: ReactNode; onClose: () => void }) {
   return <div className="modal-backdrop" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
     <section className="modal" role="dialog" aria-modal="true" aria-label={title}>
-      <div className="modal-head"><div><div className="eyebrow">{eyebrow}</div><h2>{title}</h2></div><button className="icon-button" aria-label="Fechar" onClick={onClose}><X size={19} /></button></div>
+      <div className="modal-head"><div><div className="eyebrow">{eyebrow}</div><h2>{title}</h2></div><button className="icon-button" aria-label="Fechar" onClick={onClose}><X size={32} /></button></div>
       {children}
     </section>
   </div>;
+}
+
+function LoginScreen({ onAuthenticated }: { onAuthenticated: (user: AuthUser, token: string) => void }) {
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [username, setUsername] = useState('suenaga');
+  const [displayName, setDisplayName] = useState('');
+  const [password, setPassword] = useState('1234');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { data: status } = useSystemStatus();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const endpoint = mode === 'login' ? '/api/auth/login' : '/api/auth/register';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: username.trim(),
+          displayName: displayName.trim() || username.trim(),
+          password: password.trim(),
+        }),
+      });
+      const data = (await res.json()) as { token?: string; user?: AuthUser; error?: string };
+      if (!res.ok || !data.token || !data.user) {
+        setError(data.error || 'Não foi possível entrar. Confira usuário e senha.');
+        setBusy(false);
+        return;
+      }
+      localStorage.setItem(AUTH_STORAGE_KEY, data.token);
+      localStorage.setItem(AUTH_USER_KEY, JSON.stringify(data.user));
+      onAuthenticated(data.user, data.token);
+    } catch {
+      setError('Erro de conexão com o servidor.');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="login-viewport" data-testid="login-screen">
+      <div className="login-card">
+        <div className="login-brand">
+          <span className="login-logo"><Egg size={40} /></span>
+          <div>
+            <span className="login-kicker">SISTEMA PROTEGIDO · SUPABASE</span>
+            <h1>Granja Suenaga</h1>
+          </div>
+        </div>
+
+        <div className="segmented-giant login-tabs">
+          <button
+            type="button"
+            className={mode === 'login' ? 'selected' : ''}
+            onClick={() => { setMode('login'); setError(null); }}
+            data-testid="tab-login"
+          >
+            <Lock size={24} /> Entrar
+          </button>
+          <button
+            type="button"
+            className={mode === 'register' ? 'selected' : ''}
+            onClick={() => { setMode('register'); setUsername(''); setPassword(''); setError(null); }}
+            data-testid="tab-register"
+          >
+            <UserPlus size={24} /> Novo Usuário
+          </button>
+        </div>
+
+        <form className="login-form" onSubmit={e => { void handleSubmit(e); }}>
+          <label className="field-label">
+            Usuário
+            <input
+              required
+              autoFocus
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              placeholder="Ex.: suenaga"
+              data-testid="input-login-username"
+            />
+          </label>
+
+          {mode === 'register' && (
+            <label className="field-label">
+              Nome da Granja / Pessoa
+              <input
+                required
+                value={displayName}
+                onChange={e => setDisplayName(e.target.value)}
+                placeholder="Ex.: Granja Suenaga"
+                data-testid="input-register-displayname"
+              />
+            </label>
+          )}
+
+          <label className="field-label">
+            Senha / PIN
+            <input
+              required
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="Digite sua senha"
+              data-testid="input-login-password"
+            />
+          </label>
+
+          {error && <div className="login-error" role="alert" data-testid="text-login-error">{error}</div>}
+
+          <button
+            type="submit"
+            className="button primary login-submit-btn"
+            disabled={busy || !username.trim() || !password.trim()}
+            data-testid="button-login-submit"
+          >
+            <UserCheck size={28} />
+            {busy ? 'Entrando…' : mode === 'login' ? 'Entrar na Granja' : 'Cadastrar e Entrar'}
+          </button>
+
+          {mode === 'login' && (
+            <button
+              type="button"
+              className="button secondary login-quick-btn"
+              onClick={() => { setUsername('suenaga'); setPassword('1234'); }}
+              data-testid="button-fill-default-login"
+            >
+              Preencher Acesso Padrão (suenaga / 1234)
+            </button>
+          )}
+        </form>
+
+        <div className="login-footer">
+          <Database size={20} />
+          <span>{status?.connected ? 'Banco Supabase Conectado e Ativo' : 'Conectando ao Supabase…'}</span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function ProductForm({ initial, onSave, busy, onClose }: { initial?: Product; onSave: (data: { name: string; category: Product['category']; unit: string; quantity: number; minimumQuantity: number | null; unitCost: number | null }) => void; busy: boolean; onClose: () => void }) {
@@ -111,58 +243,81 @@ function ProductForm({ initial, onSave, busy, onClose }: { initial?: Product; on
     { key: 'feed', label: 'Alimentação' }, { key: 'medicine', label: 'Remédios' },
     { key: 'supplies', label: 'Insumos' }, { key: 'equipment', label: 'Equipamentos' }, { key: 'other', label: 'Outros' },
   ];
+  const applySuggestion = (item: string) => {
+    setName(item);
+    if (item.includes('Vacina')) { setCategory('medicine'); setUnit('un'); }
+    else { setCategory('feed'); setUnit('kg'); }
+  };
   return <form className="modal-form" onSubmit={e => { e.preventDefault(); onSave({ name: name.trim(), category, unit, quantity: Number(quantity), minimumQuantity: minimum ? Number(minimum) : null, unitCost: unitCost ? Number(unitCost) : null }); }}>
-    <label className="field-label">Nome do produto<input autoFocus required value={name} onChange={e => setName(e.target.value)} placeholder="Ex.: Ração postura" />
-      {!initial && <div className="suggestion-row">{quickProducts.map(item => <button type="button" key={item} onClick={() => { setName(item); setCategory(item === 'Remédios' ? 'medicine' : item === 'Ração' ? 'feed' : 'supplies'); }} className="suggestion-chip">{item}</button>)}</div>}
+    <label className="field-label">Nome do produto<input autoFocus required value={name} onChange={e => setName(e.target.value)} placeholder="Ex.: Milho em Grão" data-testid="input-product-name" />
+      {!initial && <div className="suggestion-row">{quickProducts.map(item => <button type="button" key={item} onClick={() => applySuggestion(item)} className="suggestion-chip">{item}</button>)}</div>}
     </label>
-    <div className="field-label">Escolha o tipo<div className="choice-grid">{categoryOptions.map(opt => <button type="button" key={opt.key} className={`choice-pill ${category === opt.key ? 'selected' : ''}`} onClick={() => setCategory(opt.key)}>{opt.label}</button>)}</div></div>
+    <div className="field-label">Tipo<div className="choice-grid">{categoryOptions.map(opt => <button type="button" key={opt.key} className={`choice-pill ${category === opt.key ? 'selected' : ''}`} onClick={() => setCategory(opt.key)}>{opt.label}</button>)}</div></div>
     <div className="form-row">
-      <label className="field-label">{initial ? 'Quantidade atual' : 'Quantidade'}<input required type="number" min="0" step="any" value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="0" disabled={!!initial} />{initial && <span className="field-hint">Para ajustar, registre uma entrada ou saída.</span>}</label>
-      <label className="field-label">Unidade<select value={unit} onChange={e => setUnit(e.target.value)}><option value="kg">Quilos (kg)</option><option value="un">Unidades</option><option value="L">Litros (L)</option><option value="saco">Sacos</option><option value="dúzia">Dúzias</option></select></label>
+      <label className="field-label">{initial ? 'Saldo atual' : 'Quantidade'}<input required type="number" min="0" step="any" value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="0" disabled={!!initial} data-testid="input-product-quantity" />
+        {!initial && <div className="suggestion-row">{quickQuantities.map(q => <button type="button" key={q} onClick={() => setQuantity(String(q))} className="suggestion-chip">+{q}</button>)}</div>}
+      </label>
+      <label className="field-label">Unidade<select value={unit} onChange={e => setUnit(e.target.value)}><option value="kg">Quilos (kg)</option><option value="un">Unidades (un)</option><option value="L">Litros (L)</option><option value="saco">Sacos</option></select></label>
     </div>
-    <label className="field-label">Avisar quando chegar a<input type="number" min="0" step="any" value={minimum} onChange={e => setMinimum(e.target.value)} placeholder="Opcional — estoque mínimo" /></label>
-    <label className="field-label">Custo por unidade <span className="optional">opcional · usado nas receitas</span><input type="number" min="0" step="0.01" value={unitCost} onChange={e => setUnitCost(e.target.value)} placeholder="R$ 0,00" /></label>
-    <div className="modal-actions"><button type="button" className="button secondary" onClick={onClose}>Cancelar</button><button className="button primary" disabled={busy || !name.trim() || !quantity}>{busy ? 'Salvando…' : initial ? 'Salvar alterações' : 'Adicionar ao estoque'}</button></div>
+    <div className="form-row">
+      <label className="field-label">Estoque mínimo<input type="number" min="0" step="any" value={minimum} onChange={e => setMinimum(e.target.value)} placeholder="Ex.: 20" /></label>
+      <label className="field-label">Preço por {unit} (R$)<input type="number" min="0" step="0.01" value={unitCost} onChange={e => setUnitCost(e.target.value)} placeholder="R$ 0,00" /></label>
+    </div>
+    <div className="modal-actions"><button type="button" className="button secondary" onClick={onClose}>Cancelar</button><button className="button primary" disabled={busy || !name.trim() || quantity === ''} data-testid="button-save-product">{busy ? 'Salvando…' : 'Salvar Produto'}</button></div>
   </form>;
 }
 
-function MovementForm({ products, onSave, busy, onClose, preferred }: { products: Product[]; onSave: (data: { productId: number; direction: 'in' | 'out'; quantity: number; note: string }) => void; busy: boolean; onClose: () => void; preferred?: 'in' | 'out' }) {
-  const [productId, setProductId] = useState(products[0]?.id ?? 0);
+function MovementForm({ products, onSave, busy, onClose, preferred, initialProductId }: { products: Product[]; onSave: (data: { productId: number; direction: 'in' | 'out'; quantity: number; note: string }) => void; busy: boolean; onClose: () => void; preferred?: 'in' | 'out'; initialProductId?: number }) {
+  const [productId, setProductId] = useState(initialProductId ?? products[0]?.id ?? 0);
   const [direction, setDirection] = useState<'in' | 'out'>(preferred ?? 'in');
   const [quantity, setQuantity] = useState('');
   const [note, setNote] = useState('');
+  const selectedProduct = products.find(p => p.id === Number(productId));
   return <form className="modal-form" onSubmit={e => { e.preventDefault(); onSave({ productId: Number(productId), direction, quantity: Number(quantity), note: note.trim() }); }}>
-    <div className="field-label">O que você vai registrar?<div className="toggle-row">
-      <button type="button" className={`toggle-choice ${direction === 'in' ? 'selected in' : ''}`} onClick={() => setDirection('in')}><ArrowDownLeft size={17} />Entrou</button>
-      <button type="button" className={`toggle-choice ${direction === 'out' ? 'selected out' : ''}`} onClick={() => setDirection('out')}><ArrowUpRight size={17} />Saiu</button>
+    <div className="field-label">Tipo de movimento<div className="toggle-row">
+      <button type="button" className={`toggle-choice ${direction === 'in' ? 'selected in' : ''}`} onClick={() => setDirection('in')}><ArrowDownLeft size={26} />Entrou</button>
+      <button type="button" className={`toggle-choice ${direction === 'out' ? 'selected out' : ''}`} onClick={() => setDirection('out')}><ArrowUpRight size={26} />Saiu</button>
     </div></div>
-    <div className="field-label">Escolha o produto{products.length ? <div className="product-choice-list">{products.map(p => <button type="button" key={p.id} className={`product-choice ${Number(productId) === p.id ? 'selected' : ''}`} onClick={() => setProductId(p.id)}><span className="product-choice-name">{p.name}</span><span>{p.quantity} {p.unit}</span></button>)}</div> : <p className="field-hint">Adicione um produto ao estoque primeiro.</p>}</div>
+    <div className="field-label">Produto{products.length ? <div className="product-choice-list">{products.map(p => <button type="button" key={p.id} className={`product-choice ${Number(productId) === p.id ? 'selected' : ''}`} onClick={() => setProductId(p.id)}><span className="product-choice-name">{p.name}</span><span>{p.quantity} {p.unit}</span></button>)}</div> : <p className="field-hint">Cadastre um produto primeiro.</p>}</div>
     <div className="form-row">
-      <label className="field-label">Quantidade<input type="number" required min="0.01" step="any" value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="Quanto?" /></label>
-      <label className="field-label">Observação <span className="optional">opcional</span><input value={note} onChange={e => setNote(e.target.value)} placeholder="Ex.: compra no mercado" /></label>
+      <label className="field-label">Quantidade ({selectedProduct?.unit ?? 'un'})<input type="number" required min="0.01" step="any" value={quantity} onChange={e => setQuantity(e.target.value)} placeholder="Quanto?" data-testid="input-movement-quantity" />
+        <div className="suggestion-row">{quickQuantities.map(q => <button type="button" key={q} onClick={() => setQuantity(String(q))} className="suggestion-chip">{direction === 'in' ? `+${q}` : `−${q}`}</button>)}</div>
+      </label>
+      <label className="field-label">Observação<input value={note} onChange={e => setNote(e.target.value)} placeholder="Ex.: Cooperativa" /></label>
     </div>
-    <div className="modal-actions"><button type="button" className="button secondary" onClick={onClose}>Cancelar</button><button className="button primary" disabled={busy || !products.length || !quantity}>{busy ? 'Registrando…' : 'Registrar movimento'}</button></div>
+    <div className="modal-actions"><button type="button" className="button secondary" onClick={onClose}>Cancelar</button><button className="button primary" disabled={busy || !products.length || !quantity} data-testid="button-save-movement">{busy ? 'Salvando…' : 'Confirmar'}</button></div>
   </form>;
 }
 
-function FinanceForm({ onSave, busy, onClose, initial }: { onSave: (data: { kind: 'payable' | 'receivable'; description: string; amount: number; dueDate: string; category: string }) => void; busy: boolean; onClose: () => void; initial?: FinanceEntry }) {
-  const [kind, setKind] = useState<'payable' | 'receivable'>(initial?.kind ?? 'payable');
+function FinanceForm({ onSave, busy, onClose, initial, preferredKind }: { onSave: (data: { kind: 'payable' | 'receivable'; description: string; amount: number; dueDate: string; category: string }) => void; busy: boolean; onClose: () => void; initial?: FinanceEntry; preferredKind?: 'payable' | 'receivable' }) {
+  const [kind, setKind] = useState<'payable' | 'receivable'>(initial?.kind ?? preferredKind ?? 'payable');
   const [description, setDescription] = useState(initial?.description ?? '');
   const [amount, setAmount] = useState(initial?.amount?.toString() ?? '');
   const [dueDate, setDueDate] = useState(initial?.dueDate.slice(0, 10) ?? today());
-  const [category, setCategory] = useState(initial?.category ?? financeCategories[0]);
+  const [category, setCategory] = useState(initial?.category ?? (kind === 'receivable' ? 'Venda de ovos' : 'Ração e alimentação'));
+  const suggestions = kind === 'payable' ? quickFinancePayable : quickFinanceReceivable;
   return <form className="modal-form" onSubmit={e => { e.preventDefault(); onSave({ kind, description: description.trim(), amount: Number(amount), dueDate, category }); }}>
-    <div className="field-label">É uma conta a…<div className="toggle-row">
-      <button type="button" className={`toggle-choice ${kind === 'payable' ? 'selected out' : ''}`} onClick={() => setKind('payable')}><ArrowUpRight size={17} />Pagar</button>
-      <button type="button" className={`toggle-choice ${kind === 'receivable' ? 'selected in' : ''}`} onClick={() => setKind('receivable')}><ArrowDownLeft size={17} />Receber</button>
+    <div className="field-label">Tipo de conta<div className="toggle-row">
+      <button type="button" className={`toggle-choice ${kind === 'payable' ? 'selected out' : ''}`} onClick={() => { setKind('payable'); if (!initial) setCategory('Ração e alimentação'); }}><ArrowUpRight size={26} />A Pagar</button>
+      <button type="button" className={`toggle-choice ${kind === 'receivable' ? 'selected in' : ''}`} onClick={() => { setKind('receivable'); if (!initial) setCategory('Venda de ovos'); }}><ArrowDownLeft size={26} />A Receber</button>
     </div></div>
-    <label className="field-label">Do que se trata?<input autoFocus required value={description} onChange={e => setDescription(e.target.value)} placeholder="Ex.: Compra de ração" /></label>
+    <label className="field-label">Descrição<input autoFocus required value={description} onChange={e => setDescription(e.target.value)} placeholder="Ex.: Venda de ovos" data-testid="input-finance-description" />
+      {!initial && <div className="suggestion-row">{suggestions.map(s => <button type="button" key={s} onClick={() => setDescription(s)} className="suggestion-chip">{s}</button>)}</div>}
+    </label>
     <div className="field-label">Categoria<div className="choice-grid">{financeCategories.map(item => <button type="button" key={item} className={`choice-pill ${category === item ? 'selected' : ''}`} onClick={() => setCategory(item)}>{item}</button>)}</div></div>
     <div className="form-row">
-      <label className="field-label">Valor<input type="number" required min="0.01" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="R$ 0,00" /></label>
-      <label className="field-label">Vencimento<input type="date" required value={dueDate} onChange={e => setDueDate(e.target.value)} /></label>
+      <label className="field-label">Valor (R$)<input type="number" required min="0.01" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="R$ 0,00" data-testid="input-finance-amount" />
+        <div className="suggestion-row">{quickAmounts.map(a => <button type="button" key={a} onClick={() => setAmount(String(a))} className="suggestion-chip">R$ {a}</button>)}</div>
+      </label>
+      <label className="field-label">Vencimento<input type="date" required value={dueDate} onChange={e => setDueDate(e.target.value)} />
+        <div className="suggestion-row">
+          <button type="button" onClick={() => setDueDate(today())} className="suggestion-chip">Hoje</button>
+          <button type="button" onClick={() => setDueDate(addDaysToToday(7))} className="suggestion-chip">+7d</button>
+          <button type="button" onClick={() => setDueDate(addDaysToToday(30))} className="suggestion-chip">+30d</button>
+        </div>
+      </label>
     </div>
-    <div className="modal-actions"><button type="button" className="button secondary" onClick={onClose}>Cancelar</button><button className="button primary" disabled={busy || !description.trim() || !amount}>{busy ? 'Salvando…' : initial ? 'Salvar alterações' : 'Adicionar conta'}</button></div>
+    <div className="modal-actions"><button type="button" className="button secondary" onClick={onClose}>Cancelar</button><button className="button primary" disabled={busy || !description.trim() || !amount} data-testid="button-save-finance">{busy ? 'Salvando…' : 'Salvar Conta'}</button></div>
   </form>;
 }
 
@@ -171,64 +326,133 @@ function useRefresh() {
   return (...keys: ReadonlyArray<readonly unknown[]>) => keys.forEach(queryKey => { void qc.invalidateQueries({ queryKey }); });
 }
 
-function DashboardPage() {
+function DashboardScreen({ onGoToSlide }: { onGoToSlide: (idx: number) => void }) {
   const { data, isLoading, isError, refetch } = useGetDashboard();
   const { data: products = [] } = useGetProducts();
-  const { data: movements = [] } = useGetMovements();
-  const { data: finance = [] } = useGetFinanceEntries();
+  const { data: poultrySummary } = useGetPoultrySummary();
+  const { data: feedingSummary } = useGetFeedingSummary();
   const createMove = useCreateMovement();
   const createFinance = useCreateFinanceEntry();
   const createProduct = useCreateProduct();
   const refresh = useRefresh();
   const [modal, setModal] = useState<'movement' | 'finance' | 'product' | null>(null);
   const [preferred, setPreferred] = useState<'in' | 'out'>('in');
+  const [preferredFinanceKind, setPreferredFinanceKind] = useState<'payable' | 'receivable'>('receivable');
+  const [preselectedProductId, setPreselectedProductId] = useState<number | undefined>();
+
   const pendingBills = data?.pendingPayables ?? 0;
   const dueIn = data?.pendingReceivables ?? 0;
-  const todayLabel = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
-  const onMovement = (input: { productId: number; direction: 'in' | 'out'; quantity: number; note: string }) => createMove.mutate({ data: input }, { onSuccess: () => { refresh(getGetMovementsQueryKey(), getGetProductsQueryKey(), getGetDashboardQueryKey()); setModal(null); } });
+  const liveBirds = poultrySummary?.liveBirdCount ?? 0;
+  const activeLots = poultrySummary?.activeLotCount ?? 0;
+  const todayFeedKg = feedingSummary?.todayQuantityKg ?? 0;
+
+  const onMovement = (input: { productId: number; direction: 'in' | 'out'; quantity: number; note: string }) => createMove.mutate({ data: input }, { onSuccess: () => { refresh(getGetMovementsQueryKey(), getGetProductsQueryKey(), getGetDashboardQueryKey()); setModal(null); setPreselectedProductId(undefined); } });
   const onFinance = (input: { kind: 'payable' | 'receivable'; description: string; amount: number; dueDate: string; category: string }) => createFinance.mutate({ data: input }, { onSuccess: () => { refresh(getGetFinanceEntriesQueryKey(), getGetDashboardQueryKey()); setModal(null); } });
   const onProduct = (input: { name: string; category: Product['category']; unit: string; quantity: number; minimumQuantity: number | null; unitCost: number | null }) => createProduct.mutate({ data: input }, { onSuccess: () => { refresh(getGetProductsQueryKey(), getGetDashboardQueryKey()); setModal(null); } });
-  const recent = (data?.recentFinanceEntries ?? []).slice(0, 4);
-  return <div className="page-content">
-    <PageHeading eyebrow="UM DIA DE CADA VEZ" title="Bom dia, vamos cuidar?" subtitle={`Seu resumo de hoje · ${todayLabel}`} />
-    {isLoading ? <LoadingPanel /> : isError || !data ? <ErrorPanel retry={() => { void refetch(); }} /> : <>
-      <section className="welcome-band">
-        <div className="welcome-text"><span className="welcome-kicker"><span className="sun-dot" /> ROTINA EM DIA</span><h2>Um olhar rápido,<br /><em>e você já sabe.</em></h2><p>Estoque, contas e pequenos cuidados — tudo no seu lugar.</p></div>
-        <div className="welcome-art" aria-hidden="true"><div className="art-sun" /><div className="art-hill hill-one" /><div className="art-hill hill-two" /><div className="coop"><div className="coop-roof" /><div className="coop-body"><span /><span /><span /></div><div className="coop-door" /></div><div className="art-grass">〰　〰　〰</div></div>
-        <div className="welcome-date"><CalendarDays size={14} />{new Intl.DateTimeFormat('pt-BR', { day: 'numeric', month: 'long' }).format(new Date())}</div>
-      </section>
-      <section className="quick-actions" aria-label="Ações rápidas">
-        <button className="quick-action quick-green" onClick={() => { setPreferred('in'); setModal('movement'); }} data-testid="button-entrada"><span className="quick-icon"><ArrowDownLeft size={20} /></span><span><b>Entrada no estoque</b><small>Chegou produto novo?</small></span><ChevronRight size={17} /></button>
-        <button className="quick-action quick-amber" onClick={() => { setPreferred('out'); setModal('movement'); }} data-testid="button-saida"><span className="quick-icon"><ArrowUpRight size={20} /></span><span><b>Saída do estoque</b><small>Usou algum produto?</small></span><ChevronRight size={17} /></button>
-        <button className="quick-action quick-paper" onClick={() => setModal('finance')} data-testid="button-conta"><span className="quick-icon"><CircleDollarSign size={20} /></span><span><b>Anotar uma conta</b><small>A pagar ou a receber</small></span><ChevronRight size={17} /></button>
-      </section>
-      <section className="stats-grid">
-        <div className="stat-card"><span className="stat-symbol green"><Package size={18} /></span><span className="stat-caption">PRODUTOS NO ESTOQUE</span><strong>{data.productCount}</strong><span className="stat-foot">itens acompanhados</span></div>
-        <div className={`stat-card ${data.lowStockCount ? 'attention' : ''}`}><span className="stat-symbol amber"><AlertTriangle size={18} /></span><span className="stat-caption">PRECISAM DE ATENÇÃO</span><strong>{data.lowStockCount}</strong><span className="stat-foot">{data.lowStockCount ? 'abaixo do estoque mínimo' : 'estoque está tranquilo'}</span></div>
-        <div className="stat-card"><span className="stat-symbol coral"><TrendingDown size={18} /></span><span className="stat-caption">CONTAS A PAGAR</span><strong>{money(pendingBills)}</strong><span className="stat-foot">em aberto</span></div>
-        <div className="stat-card"><span className="stat-symbol blue"><TrendingUp size={18} /></span><span className="stat-caption">CONTAS A RECEBER</span><strong>{money(dueIn)}</strong><span className="stat-foot">em aberto</span></div>
-      </section>
-      <div className="dashboard-columns">
-        <section className="surface-card low-stock-card">
-          <div className="section-title-row"><div><div className="eyebrow">OLHO NO ESTOQUE</div><h2>Hora de repor?</h2></div><Link href="/estoque" className="text-link">Ver estoque <ChevronRight size={15} /></Link></div>
-          {data.lowStockProducts.length ? <div className="low-stock-list">{data.lowStockProducts.slice(0, 4).map(product => <div className="low-stock-row" key={product.id}><span className="product-initial"><Package size={17} /></span><span className="low-prod-text"><b>{product.name}</b><small>{categoryNames[product.category] ?? product.category}</small></span><span className="low-prod-qty"><b>{product.quantity} {product.unit}</b><small>Mín. {product.minimumQuantity} {product.unit}</small></span><span className="stock-alert">Repor</span></div>)}</div> : <div className="calm-stock"><span><Check size={18} /></span><div><b>Tudo em ordem por aqui</b><small>Nenhum produto abaixo do mínimo.</small></div></div>}
-        </section>
-        <section className="surface-card recent-card">
-          <div className="section-title-row"><div><div className="eyebrow">MOVIMENTAÇÃO</div><h2>Últimas contas</h2></div><Link href="/contas" className="text-link">Ver todas <ChevronRight size={15} /></Link></div>
-          {recent.length ? <div className="recent-list">{recent.map(entry => <div className="recent-row" key={entry.id}><span className={`finance-mark ${entry.kind}`}><CircleDollarSign size={17} /></span><span className="recent-info"><b>{entry.description}</b><small>{entry.kind === 'payable' ? 'A pagar' : 'A receber'} · {dateBR(entry.dueDate)}</small></span><b className={`recent-amount ${entry.kind}`}>{entry.kind === 'payable' ? '−' : '+'}{money(entry.amount)}</b></div>)}</div> : <div className="mini-empty">Suas contas registradas aparecem aqui.</div>}
-        </section>
+
+  return (
+    <div className="screen-panel">
+      <div className="screen-header">
+        <div>
+          <span className="screen-kicker"><Sprout size={22} /> TELA 1 · VISÃO GERAL</span>
+          <h1>Painel da Granja Suenaga</h1>
+        </div>
+        <div className="screen-header-actions">
+          <button className="button primary giant-btn" onClick={() => setModal('product')}>
+            <Plus size={26} /> Novo Produto
+          </button>
+        </div>
       </div>
-      <section className="notebook-strip"><div className="strip-icon"><Activity size={18} /></div><div><b>Seu caderno está ficando completo</b><span>{movements.length} {movements.length === 1 ? 'movimento registrado' : 'movimentos registrados'} · {finance.length} {finance.length === 1 ? 'conta anotada' : 'contas anotadas'}</span></div><button className="strip-action" onClick={() => setModal('product')}>Adicionar produto <Plus size={15} /></button></section>
-    </>}
-    {modal === 'movement' && <Modal title={preferred === 'in' ? 'Registrar entrada' : 'Registrar saída'} eyebrow="ESTOQUE · MOVIMENTO" onClose={() => setModal(null)}><MovementForm products={products} preferred={preferred} onClose={() => setModal(null)} busy={createMove.isPending} onSave={onMovement} /></Modal>}
-    {modal === 'finance' && <Modal title="Anotar uma conta" eyebrow="CONTAS · NOVO REGISTRO" onClose={() => setModal(null)}><FinanceForm onClose={() => setModal(null)} busy={createFinance.isPending} onSave={onFinance} /></Modal>}
-    {modal === 'product' && <Modal title="Novo produto" eyebrow="ESTOQUE · CADASTRO" onClose={() => setModal(null)}><ProductForm onClose={() => setModal(null)} busy={createProduct.isPending} onSave={onProduct} /></Modal>}
-  </div>;
+
+      {isLoading ? <div className="giant-empty">Carregando painel…</div> : isError || !data ? <div className="giant-empty"><button className="button secondary" onClick={() => { void refetch(); }}><RotateCcw size={24} /> Tentar de novo</button></div> : (
+        <div className="dashboard-one-screen">
+          <section className="giant-quick-actions" aria-label="Ações rápidas">
+            <button className="giant-quick-btn green" onClick={() => { setPreselectedProductId(undefined); setPreferred('in'); setModal('movement'); }} data-testid="button-entrada">
+              <ArrowDownLeft size={34} />
+              <div>
+                <b>+ Entrada Estoque</b>
+                <span>Chegou ração ou milho</span>
+              </div>
+            </button>
+            <button className="giant-quick-btn amber" onClick={() => { setPreselectedProductId(undefined); setPreferred('out'); setModal('movement'); }} data-testid="button-saida">
+              <ArrowUpRight size={34} />
+              <div>
+                <b>− Saída Estoque</b>
+                <span>Usou produto hoje</span>
+              </div>
+            </button>
+            <button className="giant-quick-btn blue" onClick={() => { setPreferredFinanceKind('receivable'); setModal('finance'); }} data-testid="button-conta">
+              <CircleDollarSign size={34} />
+              <div>
+                <b>+ Anotar Conta</b>
+                <span>Venda ou despesa</span>
+              </div>
+            </button>
+          </section>
+
+          <section className="giant-kpi-grid">
+            <button type="button" className="giant-kpi-card" onClick={() => onGoToSlide(1)}>
+              <div className="kpi-top"><Package size={28} /> <span>ESTOQUE</span></div>
+              <strong>{data.productCount} itens</strong>
+              <small className={data.lowStockCount ? 'warn-text' : ''}>
+                {data.lowStockCount ? `⚠ ${data.lowStockCount} precisam repor` : '✓ Estoque em dia'}
+              </small>
+            </button>
+
+            <button type="button" className="giant-kpi-card" onClick={() => onGoToSlide(2)}>
+              <div className="kpi-top"><Bird size={28} /> <span>PLANTEL VIVO</span></div>
+              <strong>{liveBirds} aves</strong>
+              <small>{activeLots} lotes · {todayFeedKg} kg hoje</small>
+            </button>
+
+            <button type="button" className="giant-kpi-card coral" onClick={() => onGoToSlide(4)}>
+              <div className="kpi-top"><TrendingDown size={28} /> <span>A PAGAR</span></div>
+              <strong>{money(pendingBills)}</strong>
+              <small>contas em aberto</small>
+            </button>
+
+            <button type="button" className="giant-kpi-card green" onClick={() => onGoToSlide(4)}>
+              <div className="kpi-top"><TrendingUp size={28} /> <span>A RECEBER</span></div>
+              <strong>{money(dueIn)}</strong>
+              <small>saldo: {money(dueIn - pendingBills)}</small>
+            </button>
+          </section>
+
+          {data.lowStockProducts.length > 0 && (
+            <section className="giant-alert-banner">
+              <div className="alert-banner-left">
+                <AlertTriangle size={30} />
+                <div>
+                  <b>Atenção: Estoque Baixo</b>
+                  <span>{data.lowStockProducts.slice(0, 2).map(p => `${p.name} (${p.quantity} ${p.unit})`).join(' · ')}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="button primary giant-btn"
+                onClick={() => {
+                  setPreselectedProductId(data.lowStockProducts[0].id);
+                  setPreferred('in');
+                  setModal('movement');
+                }}
+              >
+                + Repor Agora
+              </button>
+            </section>
+          )}
+        </div>
+      )}
+
+      {modal === 'movement' && <Modal title={preferred === 'in' ? 'Entrada no Estoque' : 'Saída do Estoque'} eyebrow="ESTOQUE · MOVIMENTO" onClose={() => { setModal(null); setPreselectedProductId(undefined); }}><MovementForm products={products} preferred={preferred} initialProductId={preselectedProductId} onClose={() => { setModal(null); setPreselectedProductId(undefined); }} busy={createMove.isPending} onSave={onMovement} /></Modal>}
+      {modal === 'finance' && <Modal title="Anotar Conta ou Venda" eyebrow="FINANCEIRO · REGISTRO" onClose={() => setModal(null)}><FinanceForm preferredKind={preferredFinanceKind} onClose={() => setModal(null)} busy={createFinance.isPending} onSave={onFinance} /></Modal>}
+      {modal === 'product' && <Modal title="Cadastrar Produto" eyebrow="ESTOQUE · NOVO ITEM" onClose={() => setModal(null)}><ProductForm onClose={() => setModal(null)} busy={createProduct.isPending} onSave={onProduct} /></Modal>}
+    </div>
+  );
 }
 
-function StockPage() {
+function StockScreen() {
   const { data: products, isLoading, isError, refetch } = useGetProducts();
-  const { data: movements, isLoading: movementsLoading } = useGetMovements();
+  const { data: movements } = useGetMovements();
   const createProduct = useCreateProduct();
   const updateProduct = useUpdateProduct();
   const deleteProduct = useDeleteProduct();
@@ -237,50 +461,143 @@ function StockPage() {
   const refresh = useRefresh();
   const [modal, setModal] = useState<'product' | 'movement' | null>(null);
   const [editing, setEditing] = useState<Product | undefined>();
-  const [search, setSearch] = useState('');
+  const [movementPref, setMovementPref] = useState<{ direction: 'in' | 'out'; productId?: number }>({ direction: 'in' });
   const [filter, setFilter] = useState('todos');
-  const [movementTab, setMovementTab] = useState<'recent' | 'all'>('recent');
+  const [subView, setSubView] = useState<'products' | 'movements'>('products');
+  const [page, setPage] = useState(0);
+
   const list = products ?? [];
-  const visibleProducts = useMemo(() => list.filter(p => (filter === 'todos' || p.category === filter) && p.name.toLowerCase().includes(search.toLowerCase())), [list, filter, search]);
+  const filteredProducts = useMemo(() => list.filter(p => filter === 'todos' || p.category === filter), [list, filter]);
+
+  const perPage = 3;
+  const totalProdPages = Math.max(1, Math.ceil(filteredProducts.length / perPage));
+  const safeProdPage = Math.min(page, totalProdPages - 1);
+  const visibleProducts = filteredProducts.slice(safeProdPage * perPage, (safeProdPage + 1) * perPage);
+
+  const allMovements = (movements ?? []).slice().sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
+  const totalMovePages = Math.max(1, Math.ceil(allMovements.length / perPage));
+  const safeMovePage = Math.min(page, totalMovePages - 1);
+  const visibleMovements = allMovements.slice(safeMovePage * perPage, (safeMovePage + 1) * perPage);
+
   const saveProduct = (input: { name: string; category: Product['category']; unit: string; quantity: number; minimumQuantity: number | null; unitCost: number | null }) => {
-    if (editing) updateProduct.mutate({ productId: editing.id, data: { name: input.name, category: input.category, unit: input.unit, minimumQuantity: input.minimumQuantity, unitCost: input.unitCost } }, { onSuccess: () => { refresh(getGetProductsQueryKey(), getGetDashboardQueryKey()); setEditing(undefined); setModal(null); } });
+    if (editing) updateProduct.mutate({ productId: editing.id, data: { name: input.name, category: input.category, unit: input.unit, minimumQuantity: input.minimumQuantity, unitCost: input.unitCost } }, { onSuccess: () => { refresh(getGetProductsQueryKey(), getGetDashboardQueryKey(), getGetFeedRecipesQueryKey()); setEditing(undefined); setModal(null); } });
     else createProduct.mutate({ data: input }, { onSuccess: () => { refresh(getGetProductsQueryKey(), getGetDashboardQueryKey()); setModal(null); } });
   };
   const onMovement = (input: { productId: number; direction: 'in' | 'out'; quantity: number; note: string }) => createMovement.mutate({ data: input }, { onSuccess: () => { refresh(getGetProductsQueryKey(), getGetMovementsQueryKey(), getGetDashboardQueryKey()); setModal(null); } });
   const removeProduct = (p: Product) => { if (window.confirm(`Remover ${p.name} do estoque?`)) deleteProduct.mutate({ productId: p.id }, { onSuccess: () => refresh(getGetProductsQueryKey(), getGetDashboardQueryKey()) }); };
-  const removeMovement = (m: Movement) => { if (window.confirm('Excluir este movimento? O estoque será ajustado de volta.')) deleteMovement.mutate({ movementId: m.id }, { onSuccess: () => refresh(getGetMovementsQueryKey(), getGetProductsQueryKey(), getGetDashboardQueryKey()) }); };
-  const cats = [['todos', 'Tudo'], ['feed', 'Alimentação'], ['medicine', 'Remédios'], ['supplies', 'Insumos'], ['equipment', 'Equipamentos'], ['other', 'Outros']];
-  const currentMovements = (movements ?? []).slice().sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)).slice(0, movementTab === 'recent' ? 5 : undefined);
-  return <div className="page-content">
-    <PageHeading eyebrow="CADERNO DE ESTOQUE" title="O que temos à mão" subtitle="Produtos e insumos da sua granja, sem complicação." action={<><button className="button secondary" onClick={() => setModal('movement')}><ArrowLeftRight size={17} />Registrar movimento</button><button className="button primary" onClick={() => { setEditing(undefined); setModal('product'); }}><Plus size={17} />Novo produto</button></>} />
-    <div className="stock-summary-row"><div className="stock-summary"><span className="summary-icon"><Layers3 size={18} /></span><span><small>PRODUTOS CADASTRADOS</small><b>{isLoading ? '—' : list.length}</b></span></div><div className="stock-summary"><span className="summary-icon warn"><AlertTriangle size={18} /></span><span><small>PRECISAM DE REPOSIÇÃO</small><b>{isLoading ? '—' : list.filter(p => p.minimumQuantity !== null && p.quantity <= p.minimumQuantity).length}</b></span></div><div className="stock-summary note-summary"><span>REGISTRE entradas quando comprar<br />e saídas quando usar.</span></div></div>
-    <section className="surface-card stock-card">
-      <div className="stock-toolbar"><div><div className="eyebrow">SEUS PRODUTOS</div><h2>Estoque atual</h2></div><label className="search-box"><Search size={17} /><input data-testid="input-search-products" value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar produto" /></label></div>
-      <div className="filter-tabs">{cats.map(([key, label]) => <button key={key} onClick={() => setFilter(key)} className={`filter-tab ${filter === key ? 'selected' : ''}`}>{label}</button>)}</div>
-      {isLoading ? <LoadingPanel /> : isError ? <ErrorPanel retry={() => { void refetch(); }} /> : visibleProducts.length === 0 ? <EmptyState title={search || filter !== 'todos' ? 'Nenhum produto encontrado' : 'Seu estoque começa por aqui'} text={search || filter !== 'todos' ? 'Tente outra busca ou categoria.' : 'Cadastre ração, remédios e outros itens que usa na granja.'} action={!search && filter === 'todos' ? <button className="button primary" onClick={() => setModal('product')}><Plus size={17} />Cadastrar primeiro produto</button> : undefined} /> : <>
-        <div className="product-list-heading"><span>PRODUTO</span><span>QUANTIDADE ATUAL</span><span>SITUAÇÃO</span><span /></div>
-        <div className="product-list">{visibleProducts.map(p => {
-          const low = p.minimumQuantity !== null && p.quantity <= p.minimumQuantity;
-          return <article className="product-row" key={p.id} data-testid={`row-product-${p.id}`}>
-            <span className={`prod-avatar category-${p.category}`}><Package size={19} /></span>
-            <span className="product-main"><b>{p.name}</b><small>{categoryNames[p.category] ?? p.category}</small></span>
-            <span className="product-quantity"><b>{p.quantity}</b><small>{p.unit}</small>{p.minimumQuantity !== null && <em>Mín. {p.minimumQuantity} {p.unit}</em>}</span>
-            <span><span className={`status-pill ${low ? 'status-low' : 'status-ok'}`}><span />{low ? 'Repor' : 'Em dia'}</span></span>
-            <span className="row-actions"><button className="icon-button small-icon" aria-label={`Editar ${p.name}`} onClick={() => { setEditing(p); setModal('product'); }}><Pencil size={16} /></button><button className="icon-button small-icon danger-icon" aria-label={`Excluir ${p.name}`} onClick={() => removeProduct(p)} disabled={deleteProduct.isPending}><Trash2 size={16} /></button></span>
-          </article>;
-        })}</div>
-      </>}
-    </section>
-    <section className="surface-card movements-card">
-      <div className="section-title-row"><div><div className="eyebrow">HISTÓRICO DO ESTOQUE</div><h2>Entradas e saídas</h2></div><div className="segmented"><button className={movementTab === 'recent' ? 'selected' : ''} onClick={() => setMovementTab('recent')}>Recentes</button><button className={movementTab === 'all' ? 'selected' : ''} onClick={() => setMovementTab('all')}>Ver tudo</button></div></div>
-      {movementsLoading ? <LoadingPanel /> : currentMovements.length ? <div className="movement-list">{currentMovements.map(m => <div className="movement-row" key={m.id}><span className={`movement-icon ${m.direction}`}><ArrowLeftRight size={17} /></span><span className="movement-detail"><b>{m.productName}</b><small>{m.note || (m.direction === 'in' ? 'Entrada no estoque' : 'Saída do estoque')} · {dateBR(m.createdAt)}</small></span><b className={`movement-qty ${m.direction}`}>{m.direction === 'in' ? '+' : '−'}{m.quantity}</b><button className="icon-button small-icon danger-icon" aria-label="Excluir movimento" onClick={() => removeMovement(m)}><Trash2 size={15} /></button></div>)}</div> : <div className="mini-empty">Ainda não há movimentos registrados.</div>}
-    </section>
-    {modal === 'product' && <Modal title={editing ? 'Editar produto' : 'Novo produto'} eyebrow="ESTOQUE · PRODUTO" onClose={() => { setModal(null); setEditing(undefined); }}><ProductForm key={editing?.id ?? 'new'} initial={editing} onClose={() => { setModal(null); setEditing(undefined); }} busy={createProduct.isPending || updateProduct.isPending} onSave={saveProduct} /></Modal>}
-    {modal === 'movement' && <Modal title="Registrar movimento" eyebrow="ESTOQUE · ENTRADA OU SAÍDA" onClose={() => setModal(null)}><MovementForm products={list} onClose={() => setModal(null)} busy={createMovement.isPending} onSave={onMovement} /></Modal>}
-  </div>;
+  const removeMovement = (m: Movement) => { if (window.confirm('Excluir este movimento?')) deleteMovement.mutate({ movementId: m.id }, { onSuccess: () => refresh(getGetMovementsQueryKey(), getGetProductsQueryKey(), getGetDashboardQueryKey()) }); };
+
+  const cats = [['todos', 'Tudo'], ['feed', 'Ração/Grãos'], ['medicine', 'Remédios'], ['supplies', 'Insumos']];
+
+  return (
+    <div className="screen-panel">
+      <div className="screen-header">
+        <div>
+          <span className="screen-kicker"><Package size={22} /> TELA 2 · ESTOQUE</span>
+          <h1>Produtos e Insumos</h1>
+        </div>
+        <div className="screen-header-actions">
+          <button className="button secondary giant-btn" onClick={() => { setMovementPref({ direction: 'in' }); setModal('movement'); }}>
+            <ArrowLeftRight size={24} /> Movimento
+          </button>
+          <button className="button primary giant-btn" onClick={() => { setEditing(undefined); setModal('product'); }} data-testid="button-new-product">
+            <Plus size={26} /> Novo Produto
+          </button>
+        </div>
+      </div>
+
+      <div className="subview-bar">
+        <div className="segmented-giant">
+          <button type="button" className={subView === 'products' ? 'selected' : ''} onClick={() => { setSubView('products'); setPage(0); }}>
+            Estoque ({filteredProducts.length})
+          </button>
+          <button type="button" className={subView === 'movements' ? 'selected' : ''} onClick={() => { setSubView('movements'); setPage(0); }}>
+            Histórico ({allMovements.length})
+          </button>
+        </div>
+
+        {subView === 'products' && (
+          <div className="filter-pills-giant">
+            {cats.map(([key, label]) => (
+              <button key={key} type="button" onClick={() => { setFilter(key); setPage(0); }} className={`giant-filter-pill ${filter === key ? 'selected' : ''}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="pager-controls">
+          {subView === 'products' && totalProdPages > 1 && (
+            <>
+              <button type="button" className="pager-btn" disabled={safeProdPage <= 0} onClick={() => setPage(p => Math.max(0, p - 1))}><ChevronLeft size={26} /></button>
+              <span>{safeProdPage + 1} / {totalProdPages}</span>
+              <button type="button" className="pager-btn" disabled={safeProdPage >= totalProdPages - 1} onClick={() => setPage(p => Math.min(totalProdPages - 1, p + 1))}><ChevronRight size={26} /></button>
+            </>
+          )}
+          {subView === 'movements' && totalMovePages > 1 && (
+            <>
+              <button type="button" className="pager-btn" disabled={safeMovePage <= 0} onClick={() => setPage(p => Math.max(0, p - 1))}><ChevronLeft size={26} /></button>
+              <span>{safeMovePage + 1} / {totalMovePages}</span>
+              <button type="button" className="pager-btn" disabled={safeMovePage >= totalMovePages - 1} onClick={() => setPage(p => Math.min(totalMovePages - 1, p + 1))}><ChevronRight size={26} /></button>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="screen-body">
+        {subView === 'products' ? (
+          isLoading ? <div className="giant-empty">Carregando estoque…</div> :
+          isError ? <div className="giant-empty"><button className="button secondary" onClick={() => { void refetch(); }}>Tentar de novo</button></div> :
+          visibleProducts.length === 0 ? <div className="giant-empty"><p>Nenhum produto nesta categoria.</p><button className="button primary giant-btn" onClick={() => setModal('product')}><Plus size={26} /> Cadastrar Produto</button></div> :
+          <div className="giant-list">
+            {visibleProducts.map(p => {
+              const low = p.minimumQuantity !== null && p.quantity <= p.minimumQuantity;
+              return (
+                <article className={`giant-list-row ${low ? 'row-attention' : ''}`} key={p.id} data-testid={`row-product-${p.id}`}>
+                  <span className={`giant-dir-badge ${low ? 'out' : 'in'}`}><Package size={28} /></span>
+                  <div className="giant-row-main">
+                    <b>{p.name}</b>
+                    <span>{categoryNames[p.category] ?? p.category}{p.unitCost !== null ? ` · ${money(p.unitCost)}/${p.unit}` : ''}{low ? ' · ⚠ REPOR' : ''}</span>
+                  </div>
+                  <div className="giant-row-right">
+                    <strong>{p.quantity} {p.unit}</strong>
+                    {p.minimumQuantity !== null && <small>Mín. {p.minimumQuantity} {p.unit}</small>}
+                  </div>
+                  <div className="giant-row-actions">
+                    <button type="button" className="giant-quick-tag in" onClick={() => { setMovementPref({ direction: 'in', productId: p.id }); setModal('movement'); }}>+ Entrada</button>
+                    <button type="button" className="giant-quick-tag out" onClick={() => { setMovementPref({ direction: 'out', productId: p.id }); setModal('movement'); }}>− Saída</button>
+                    <button className="icon-button giant-icon-btn" aria-label={`Editar ${p.name}`} onClick={() => { setEditing(p); setModal('product'); }}><Pencil size={24} /></button>
+                    <button className="icon-button giant-icon-btn danger-icon" aria-label={`Excluir ${p.name}`} onClick={() => removeProduct(p)} disabled={deleteProduct.isPending}><Trash2 size={24} /></button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          visibleMovements.length === 0 ? <div className="giant-empty">Nenhum movimento registrado.</div> :
+          <div className="giant-list">
+            {visibleMovements.map(m => (
+              <div className="giant-list-row" key={m.id}>
+                <span className={`giant-dir-badge ${m.direction}`}><ArrowLeftRight size={26} /></span>
+                <div className="giant-row-main">
+                  <b>{m.productName}</b>
+                  <span>{m.note || (m.direction === 'in' ? 'Entrada' : 'Saída')} · {dateBR(m.createdAt)}</span>
+                </div>
+                <strong className={`giant-row-val ${m.direction}`}>{m.direction === 'in' ? '+' : '−'}{m.quantity}</strong>
+                <button className="icon-button giant-icon-btn danger-icon" aria-label="Excluir movimento" onClick={() => removeMovement(m)}><Trash2 size={24} /></button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {modal === 'product' && <Modal title={editing ? 'Editar Produto' : 'Novo Produto'} eyebrow="ESTOQUE · PRODUTO" onClose={() => { setModal(null); setEditing(undefined); }}><ProductForm key={editing?.id ?? 'new'} initial={editing} onClose={() => { setModal(null); setEditing(undefined); }} busy={createProduct.isPending || updateProduct.isPending} onSave={saveProduct} /></Modal>}
+      {modal === 'movement' && <Modal title="Registrar Movimento" eyebrow="ESTOQUE · ENTRADA OU SAÍDA" onClose={() => setModal(null)}><MovementForm products={list} preferred={movementPref.direction} initialProductId={movementPref.productId} onClose={() => setModal(null)} busy={createMovement.isPending} onSave={onMovement} /></Modal>}
+    </div>
+  );
 }
 
-function FinancePage() {
+function FinanceScreen() {
   const { data: entries, isLoading, isError, refetch } = useGetFinanceEntries();
   const createEntry = useCreateFinanceEntry();
   const updateEntry = useUpdateFinanceEntry();
@@ -289,53 +606,375 @@ function FinancePage() {
   const [modal, setModal] = useState(false);
   const [editing, setEditing] = useState<FinanceEntry | undefined>();
   const [tab, setTab] = useState<'all' | 'payable' | 'receivable'>('all');
+  const [page, setPage] = useState(0);
+
   const rows = entries ?? [];
   const filtered = rows.filter(e => tab === 'all' || e.kind === tab).sort((a, b) => +new Date(a.dueDate) - +new Date(b.dueDate));
   const payables = rows.filter(e => e.kind === 'payable' && e.status === 'pending').reduce((s, e) => s + e.amount, 0);
   const receivables = rows.filter(e => e.kind === 'receivable' && e.status === 'pending').reduce((s, e) => s + e.amount, 0);
+
+  const perPage = 3;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
+  const safePage = Math.min(page, totalPages - 1);
+  const visibleEntries = filtered.slice(safePage * perPage, (safePage + 1) * perPage);
+  const currentDay = today();
+
   const save = (input: { kind: 'payable' | 'receivable'; description: string; amount: number; dueDate: string; category: string }) => {
     if (editing) updateEntry.mutate({ entryId: editing.id, data: { description: input.description, amount: input.amount, dueDate: input.dueDate, category: input.category } }, { onSuccess: () => { refresh(getGetFinanceEntriesQueryKey(), getGetDashboardQueryKey()); setModal(false); setEditing(undefined); } });
     else createEntry.mutate({ data: input }, { onSuccess: () => { refresh(getGetFinanceEntriesQueryKey(), getGetDashboardQueryKey()); setModal(false); } });
   };
   const toggleSettled = (entry: FinanceEntry) => updateEntry.mutate({ entryId: entry.id, data: { status: entry.status === 'pending' ? 'settled' : 'pending' } }, { onSuccess: () => refresh(getGetFinanceEntriesQueryKey(), getGetDashboardQueryKey()) });
   const remove = (entry: FinanceEntry) => { if (window.confirm(`Excluir a conta “${entry.description}”?`)) deleteEntry.mutate({ entryId: entry.id }, { onSuccess: () => refresh(getGetFinanceEntriesQueryKey(), getGetDashboardQueryKey()) }); };
-  return <div className="page-content">
-    <PageHeading eyebrow="CADERNO DE CONTAS" title="O que entra e o que sai" subtitle="Anote uma conta rapidinho. Você cuida do resto, a gente ajuda a lembrar." action={<button className="button primary" onClick={() => { setEditing(undefined); setModal(true); }}><Plus size={17} />Anotar conta</button>} />
-    <div className="finance-overview">
-      <div className="finance-total payable-total"><span className="finance-overview-icon"><ArrowUpRight size={19} /></span><div><small>AINDA PRECISA PAGAR</small><strong>{isLoading ? '—' : money(payables)}</strong><span>contas em aberto</span></div><div className="amount-decoration">−</div></div>
-      <div className="finance-total receivable-total"><span className="finance-overview-icon"><ArrowDownLeft size={19} /></span><div><small>AINDA VAI RECEBER</small><strong>{isLoading ? '—' : money(receivables)}</strong><span>contas em aberto</span></div><div className="amount-decoration">+</div></div>
-      <div className="finance-note"><span className="note-doodle"><Coins size={21} /></span><b>Dinheiro bem anotado<br />não pega de surpresa.</b><small>Marque como pago assim que resolver.</small></div>
+
+  return (
+    <div className="screen-panel">
+      <div className="screen-header">
+        <div>
+          <span className="screen-kicker"><Wallet size={22} /> TELA 5 · FINANCEIRO</span>
+          <h1>Contas a Pagar e Receber</h1>
+        </div>
+        <div className="screen-header-actions">
+          <div className="big-stat-badge coral">
+            <span>A PAGAR</span>
+            <b>{money(payables)}</b>
+          </div>
+          <div className="big-stat-badge highlight">
+            <span>A RECEBER</span>
+            <b>{money(receivables)}</b>
+          </div>
+          <button className="button primary giant-btn" onClick={() => { setEditing(undefined); setModal(true); }} data-testid="button-new-finance">
+            <Plus size={26} /> Anotar Conta
+          </button>
+        </div>
+      </div>
+
+      <div className="subview-bar">
+        <div className="segmented-giant">
+          <button type="button" className={tab === 'all' ? 'selected' : ''} onClick={() => { setTab('all'); setPage(0); }}>Todas ({rows.length})</button>
+          <button type="button" className={tab === 'payable' ? 'selected' : ''} onClick={() => { setTab('payable'); setPage(0); }}>A Pagar</button>
+          <button type="button" className={tab === 'receivable' ? 'selected' : ''} onClick={() => { setTab('receivable'); setPage(0); }}>A Receber</button>
+        </div>
+
+        {totalPages > 1 && (
+          <div className="pager-controls">
+            <button type="button" className="pager-btn" disabled={safePage <= 0} onClick={() => setPage(p => Math.max(0, p - 1))}><ChevronLeft size={26} /></button>
+            <span>{safePage + 1} / {totalPages}</span>
+            <button type="button" className="pager-btn" disabled={safePage >= totalPages - 1} onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}><ChevronRight size={26} /></button>
+          </div>
+        )}
+      </div>
+
+      <div className="screen-body">
+        {isLoading ? <div className="giant-empty">Carregando contas…</div> :
+        isError ? <div className="giant-empty"><button className="button secondary" onClick={() => { void refetch(); }}>Tentar de novo</button></div> :
+        visibleEntries.length === 0 ? <div className="giant-empty"><p>Nenhuma conta nesta aba.</p><button className="button primary giant-btn" onClick={() => setModal(true)}><Plus size={26} /> Anotar 1ª Conta</button></div> :
+        <div className="giant-list">
+          {visibleEntries.map(entry => {
+            const isOverdue = entry.status === 'pending' && entry.dueDate.slice(0, 10) < currentDay;
+            return (
+              <article className={`giant-list-row ${entry.status === 'settled' ? 'settled-row' : ''}`} key={entry.id} data-testid={`row-finance-${entry.id}`}>
+                <span className={`giant-dir-badge ${entry.kind === 'receivable' ? 'in' : 'out'}`}><CreditCard size={28} /></span>
+                <div className="giant-row-main">
+                  <b>{entry.description}</b>
+                  <span>{entry.category || 'Geral'} · Vence {dateBR(entry.dueDate)} {isOverdue ? '· ⚠ VENCIDA' : ''}</span>
+                </div>
+                <div className="giant-row-right">
+                  <strong className={`giant-row-val ${entry.kind === 'receivable' ? 'in' : 'out'}`}>
+                    {entry.kind === 'payable' ? '−' : '+'}{money(entry.amount)}
+                  </strong>
+                  <small>{entry.status === 'settled' ? '✓ Resolvida' : 'Em aberto'}</small>
+                </div>
+                <div className="giant-row-actions">
+                  <button className="button secondary giant-settle-btn" onClick={() => toggleSettled(entry)} disabled={updateEntry.isPending} data-testid={`button-settle-${entry.id}`}>
+                    <Check size={22} /> {entry.status === 'pending' ? 'Resolver' : 'Reabrir'}
+                  </button>
+                  <button className="icon-button giant-icon-btn" aria-label={`Editar ${entry.description}`} onClick={() => { setEditing(entry); setModal(true); }}><Pencil size={24} /></button>
+                  <button className="icon-button giant-icon-btn danger-icon" aria-label={`Excluir ${entry.description}`} onClick={() => remove(entry)} disabled={deleteEntry.isPending}><Trash2 size={24} /></button>
+                </div>
+              </article>
+            );
+          })}
+        </div>}
+      </div>
+
+      {modal && <Modal title={editing ? 'Editar Conta' : 'Anotar Conta'} eyebrow="FINANCEIRO · REGISTRO" onClose={() => { setModal(false); setEditing(undefined); }}><FinanceForm key={editing?.id ?? 'new'} initial={editing} onSave={save} busy={createEntry.isPending || updateEntry.isPending} onClose={() => { setModal(false); setEditing(undefined); }} /></Modal>}
     </div>
-    <section className="surface-card finance-list-card">
-      <div className="finance-list-head"><div><div className="eyebrow">SUAS ANOTAÇÕES</div><h2>Contas da granja</h2></div><div className="filter-tabs finance-tabs"><button className={`filter-tab ${tab === 'all' ? 'selected' : ''}`} onClick={() => setTab('all')}>Todas</button><button className={`filter-tab ${tab === 'payable' ? 'selected' : ''}`} onClick={() => setTab('payable')}>A pagar</button><button className={`filter-tab ${tab === 'receivable' ? 'selected' : ''}`} onClick={() => setTab('receivable')}>A receber</button></div></div>
-      {isLoading ? <LoadingPanel /> : isError ? <ErrorPanel retry={() => { void refetch(); }} /> : filtered.length ? <div className="finance-list">
-        {filtered.map(entry => <article className={`finance-entry ${entry.status === 'settled' ? 'settled-entry' : ''}`} key={entry.id} data-testid={`row-finance-${entry.id}`}>
-          <span className={`finance-entry-icon ${entry.kind}`}><CreditCard size={19} /></span>
-          <div className="finance-entry-main"><b>{entry.description}</b><span>{entry.category || 'Sem categoria'} <i>·</i> Vence {dateBR(entry.dueDate)}</span></div>
-          <div className="finance-entry-amount"><b className={entry.kind}>{entry.kind === 'payable' ? '−' : '+'}{money(entry.amount)}</b><span className={`entry-status ${entry.status}`}>{entry.status === 'pending' ? 'Em aberto' : 'Resolvida'}</span></div>
-          <div className="entry-actions"><button className="button settle-button" onClick={() => toggleSettled(entry)} disabled={updateEntry.isPending} data-testid={`button-settle-${entry.id}`}><Check size={15} />{entry.status === 'pending' ? 'Marcar resolvida' : 'Reabrir'}</button><button className="icon-button small-icon" aria-label={`Editar ${entry.description}`} onClick={() => { setEditing(entry); setModal(true); }}><Pencil size={15} /></button><button className="icon-button small-icon danger-icon" aria-label={`Excluir ${entry.description}`} onClick={() => remove(entry)} disabled={deleteEntry.isPending}><Trash2 size={15} /></button></div>
-        </article>)}
-      </div> : <EmptyState title={tab === 'all' ? 'Nenhuma conta anotada ainda' : 'Nada por aqui'} text={tab === 'all' ? 'Anote o que precisa pagar e o que tem para receber.' : 'Não encontramos contas nessa categoria.'} action={tab === 'all' ? <button className="button primary" onClick={() => setModal(true)}><Plus size={17} />Anotar primeira conta</button> : undefined} />}
-    </section>
-    <div className="finance-footnote"><span className="footnote-mark"><Wallet size={16} /></span><span>As contas resolvidas continuam anotadas para você consultar quando quiser.</span><span className="foot-count">{rows.filter(e => e.status === 'settled').length} resolvida(s)</span></div>
-    {modal && <Modal title={editing ? 'Editar anotação' : 'Anotar uma conta'} eyebrow="CONTAS · REGISTRO" onClose={() => { setModal(false); setEditing(undefined); }}><FinanceForm key={editing?.id ?? 'new'} initial={editing} onSave={save} busy={createEntry.isPending || updateEntry.isPending} onClose={() => { setModal(false); setEditing(undefined); }} /></Modal>}
-  </div>;
+  );
 }
 
-function Router() {
-  const [location] = useLocation();
-  return <ErrorBoundary resetKey={location}><Shell><Switch>
-    <Route path="/" component={DashboardPage} />
-    <Route path="/estoque" component={StockPage} />
-    <Route path="/contas" component={FinancePage} />
-    <Route path="/aves" component={PoultryPage} />
-    <Route path="/alimentacao" component={FeedingPage} />
-    <Route component={NotFound} />
-  </Switch></Shell></ErrorBoundary>;
+const SLIDES = [
+  { id: 'inicio', path: '/', label: 'Início', icon: Sprout },
+  { id: 'estoque', path: '/estoque', label: 'Estoque', icon: Package },
+  { id: 'aves', path: '/aves', label: 'Aves', icon: Egg },
+  { id: 'alimentacao', path: '/alimentacao', label: 'Ração', icon: Leaf },
+  { id: 'contas', path: '/contas', label: 'Contas', icon: Wallet },
+] as const;
+
+function SwipeWorkspace({ user, onLogout }: { user: AuthUser; onLogout: () => void }) {
+  const [location, setLocation] = useLocation();
+  const deckRef = useRef<HTMLDivElement | null>(null);
+  const isProgrammaticScroll = useRef(false);
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
+
+  const slideIndexFromLocation = useMemo(() => {
+    const idx = SLIDES.findIndex(s => s.path === location);
+    return idx >= 0 ? idx : 0;
+  }, [location]);
+
+  const [activeIndex, setActiveIndex] = useState(slideIndexFromLocation);
+
+  const goToSlide = (targetIndex: number) => {
+    const clamped = Math.max(0, Math.min(SLIDES.length - 1, targetIndex));
+    setActiveIndex(clamped);
+    const targetPath = SLIDES[clamped].path;
+    if (location !== targetPath) {
+      setLocation(targetPath);
+    }
+    const deck = deckRef.current;
+    if (deck) {
+      isProgrammaticScroll.current = true;
+      deck.scrollTo({
+        left: clamped * deck.clientWidth,
+        behavior: 'smooth',
+      });
+      window.setTimeout(() => {
+        isProgrammaticScroll.current = false;
+      }, 450);
+    }
+  };
+
+  useEffect(() => {
+    setActiveIndex(slideIndexFromLocation);
+    const deck = deckRef.current;
+    if (deck) {
+      isProgrammaticScroll.current = true;
+      deck.scrollTo({
+        left: slideIndexFromLocation * deck.clientWidth,
+        behavior: 'smooth',
+      });
+      const timer = window.setTimeout(() => {
+        isProgrammaticScroll.current = false;
+      }, 450);
+      return () => window.clearTimeout(timer);
+    }
+    return undefined;
+  }, [slideIndexFromLocation]);
+
+  const handleScroll = () => {
+    if (isProgrammaticScroll.current) return;
+    const deck = deckRef.current;
+    if (!deck || deck.clientWidth <= 0) return;
+    const idx = Math.round(deck.scrollLeft / deck.clientWidth);
+    if (idx !== activeIndex && idx >= 0 && idx < SLIDES.length) {
+      setActiveIndex(idx);
+      const targetPath = SLIDES[idx].path;
+      if (location !== targetPath) {
+        setLocation(targetPath);
+      }
+    }
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      touchStartX.current = e.touches[0].clientX;
+      touchStartY.current = e.touches[0].clientY;
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null || touchStartY.current === null || e.changedTouches.length === 0) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    const dy = e.changedTouches[0].clientY - touchStartY.current;
+    touchStartX.current = null;
+    touchStartY.current = null;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.3) {
+      if (dx < 0 && activeIndex < SLIDES.length - 1) {
+        goToSlide(activeIndex + 1);
+      } else if (dx > 0 && activeIndex > 0) {
+        goToSlide(activeIndex - 1);
+      }
+    }
+  };
+
+  return (
+    <div className="swipe-app-shell">
+      <header className="giant-topbar">
+        <div className="topbar-brand">
+          <span className="topbar-logo"><Egg size={30} /></span>
+          <strong>Granja Suenaga</strong>
+        </div>
+
+        <div className="swipe-hint-pill">
+          <button
+            type="button"
+            className="swipe-arrow-btn"
+            disabled={activeIndex <= 0}
+            onClick={() => goToSlide(activeIndex - 1)}
+            aria-label="Tela anterior"
+            data-testid="button-prev-screen"
+          >
+            <ChevronLeft size={28} />
+          </button>
+          <span className="swipe-hint-text">
+            <Hand size={22} /> Deslize pro lado ({activeIndex + 1}/{SLIDES.length})
+          </span>
+          <button
+            type="button"
+            className="swipe-arrow-btn"
+            disabled={activeIndex >= SLIDES.length - 1}
+            onClick={() => goToSlide(activeIndex + 1)}
+            aria-label="Próxima tela"
+            data-testid="button-next-screen"
+          >
+            <ChevronRight size={28} />
+          </button>
+        </div>
+
+        <div className="topbar-user">
+          <span className="user-badge"><Database size={18} /> {user.displayName}</span>
+          <button
+            type="button"
+            className="logout-btn"
+            onClick={onLogout}
+            data-testid="button-logout"
+            title="Sair do sistema"
+          >
+            <LogOut size={24} /> <span>Sair</span>
+          </button>
+        </div>
+      </header>
+
+      <main
+        ref={deckRef}
+        className="swipe-deck"
+        onScroll={handleScroll}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        data-testid="swipe-deck"
+      >
+        <section className="swipe-slide" aria-label="Início">
+          <DashboardScreen onGoToSlide={goToSlide} />
+        </section>
+        <section className="swipe-slide" aria-label="Estoque">
+          <StockScreen />
+        </section>
+        <section className="swipe-slide" aria-label="Aves">
+          <PoultryPage />
+        </section>
+        <section className="swipe-slide" aria-label="Ração">
+          <FeedingPage />
+        </section>
+        <section className="swipe-slide" aria-label="Contas">
+          <FinanceScreen />
+        </section>
+      </main>
+
+      <nav className="giant-bottom-tabs" aria-label="Navegação por telas">
+        {SLIDES.map((s, idx) => {
+          const Icon = s.icon;
+          const isCurrent = activeIndex === idx;
+          return (
+            <button
+              key={s.id}
+              type="button"
+              className={`giant-tab-btn ${isCurrent ? 'active' : ''}`}
+              onClick={() => goToSlide(idx)}
+              data-testid={`link-${s.id}`}
+            >
+              <Icon size={28} strokeWidth={isCurrent ? 2.4 : 1.9} />
+              <span>{s.label}</span>
+            </button>
+          );
+        })}
+      </nav>
+    </div>
+  );
+}
+
+function AuthenticatedApp() {
+  const [user, setUser] = useState<AuthUser | null>(() => {
+    try {
+      const saved = localStorage.getItem(AUTH_USER_KEY);
+      const token = localStorage.getItem(AUTH_STORAGE_KEY);
+      if (saved && token) return JSON.parse(saved) as AuthUser;
+    } catch {
+      // ignore
+    }
+    return null;
+  });
+  const [checking, setChecking] = useState(true);
+  const qc = useQueryClient();
+
+  useEffect(() => {
+    const token = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!token) {
+      setChecking(false);
+      return;
+    }
+    fetch('/api/auth/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(async res => {
+        if (!res.ok) throw new Error('Unauthorized');
+        const data = (await res.json()) as { authenticated: boolean; user: AuthUser };
+        if (data.authenticated && data.user) {
+          setUser(data.user);
+        } else {
+          localStorage.removeItem(AUTH_STORAGE_KEY);
+          localStorage.removeItem(AUTH_USER_KEY);
+          setUser(null);
+        }
+      })
+      .catch(() => {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+        localStorage.removeItem(AUTH_USER_KEY);
+        setUser(null);
+      })
+      .finally(() => setChecking(false));
+  }, []);
+
+  const handleLogout = () => {
+    void fetch('/api/auth/logout', { method: 'POST' });
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+    localStorage.removeItem(AUTH_USER_KEY);
+    setUser(null);
+    qc.clear();
+  };
+
+  if (checking) {
+    return <div className="login-viewport"><div className="giant-empty">Carregando Granja Suenaga…</div></div>;
+  }
+
+  if (!user) {
+    return (
+      <LoginScreen
+        onAuthenticated={(loggedUser) => {
+          setUser(loggedUser);
+          void qc.invalidateQueries();
+        }}
+      />
+    );
+  }
+
+  return (
+    <ErrorBoundary resetKey={user.username}>
+      <SwipeWorkspace user={user} onLogout={handleLogout} />
+    </ErrorBoundary>
+  );
 }
 
 function App() {
-  return <QueryClientProvider client={queryClient}><TooltipProvider><WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}><Router /></WouterRouter><Toaster /></TooltipProvider></QueryClientProvider>;
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
+          <AuthenticatedApp />
+        </WouterRouter>
+        <Toaster />
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
 }
 
 export default App;
