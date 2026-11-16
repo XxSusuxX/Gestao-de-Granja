@@ -433,27 +433,32 @@ authRouter.post("/auth/login", async (req, res) => {
       .toLowerCase();
     const rawPassword = String(req.body?.password ?? "").trim();
 
-    // No MVP, o acesso pode ser direto e sem senha!
-    const effectiveUsername = rawUsername || "suenaga";
+    if (!rawUsername) {
+      res.status(400).json({ error: "Informe o nome de usuário." });
+      return;
+    }
+
+    if (!rawPassword) {
+      res.status(400).json({
+        error: "A senha é obrigatória. Não é permitido entrar sem senha.",
+      });
+      return;
+    }
 
     const users = await sbFetch<SbUserRow[]>(
-      `farm_users?username=eq.${encodeURIComponent(effectiveUsername)}&select=*&limit=1`,
+      `farm_users?username=eq.${encodeURIComponent(rawUsername)}&select=*&limit=1`,
     );
-    let user = users[0];
+    const user = users[0];
 
-    // Se o usuário não existir no banco (como a conta suenaga excluída), gera o perfil MVP livre
     if (!user) {
-      user = {
-        id: 1,
-        username: effectiveUsername,
-        display_name: effectiveUsername === "suenaga" ? "Granja Gabriel Suenaga" : (req.body?.displayName || effectiveUsername),
-        password_hash: "",
-        role: "admin",
-        created_at: new Date().toISOString(),
-      };
-    } else if (rawPassword && user.password_hash && !verifyPassword(rawPassword, user.password_hash)) {
-      // Se informou senha incorreta para um usuário que tenha senha cadastrada
-      res.status(401).json({ error: "Senha incorreta." });
+      res.status(401).json({
+        error: "Usuário não encontrado. Se você ainda não possui cadastro, clique em 'Criar Conta'.",
+      });
+      return;
+    }
+
+    if (!user.password_hash || !verifyPassword(rawPassword, user.password_hash)) {
+      res.status(401).json({ error: "Senha incorreta. Verifique sua senha e tente novamente." });
       return;
     }
 
@@ -534,7 +539,7 @@ authRouter.post("/auth/register", async (req, res) => {
       return;
     }
 
-    const created = await sbFetch<SbUserRow[]>("farm_users", {
+    const created = await sbFetch<SbUserRow[] | SbUserRow>("farm_users", {
       method: "POST",
       body: JSON.stringify({
         username: rawUsername,
@@ -544,7 +549,11 @@ authRouter.post("/auth/register", async (req, res) => {
       }),
     });
 
-    const user = created[0];
+    const user = Array.isArray(created) ? created[0] : (created as SbUserRow);
+    if (!user) {
+      res.status(500).json({ error: "Falha ao gravar usuário no banco de dados." });
+      return;
+    }
     const payload: AuthUserPayload = {
       id: user.id,
       username: user.username,

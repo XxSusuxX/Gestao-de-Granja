@@ -2,7 +2,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Camera, Check, ChevronLeft, ChevronRight,
-  CircleDollarSign, CreditCard, Database, Egg, ImagePlus, Leaf, Lock, LogOut, Package,
+  CircleDollarSign, CreditCard, Database, Egg, ImagePlus, Leaf, Lock, LogIn, LogOut, Package,
   Plus, Sparkles, Sprout, Trash2, TrendingDown, TrendingUp, UserCheck, UserPlus, Wallet, X, Pencil, AlertTriangle,
   RotateCcw, Bird, Wheat, Hand, Settings,
 } from 'lucide-react';
@@ -305,67 +305,87 @@ function Modal({ title, eyebrow, children, onClose }: { title: string; eyebrow: 
 
 function LoginScreen({ onAuthenticated }: { onAuthenticated: (user: AuthUser, token: string) => void }) {
   const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [username, setUsername] = useState('suenaga');
+  const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { data: status } = useSystemStatus();
 
-  const handleDirectAccess = async () => {
-    setBusy(true);
+  const handleModeSwitch = (newMode: 'login' | 'register') => {
+    setMode(newMode);
     setError(null);
-    try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: 'suenaga',
-          displayName: 'Granja Gabriel Suenaga',
-          password: '',
-        }),
-      });
-      const data = (await res.json()) as { token?: string; user?: AuthUser; error?: string };
-      if (!res.ok || !data.token || !data.user) {
-        setError(data.error || 'Não foi possível entrar no modo livre.');
-        setBusy(false);
-        return;
-      }
-      localStorage.setItem(AUTH_STORAGE_KEY, data.token);
-      localStorage.setItem(AUTH_USER_KEY, JSON.stringify(data.user));
-      onAuthenticated(data.user, data.token);
-    } catch {
-      setError('Erro de conexão com o servidor.');
-      setBusy(false);
-    }
+    setPassword('');
+    setConfirmPassword('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setBusy(true);
     setError(null);
+
+    const cleanUser = username.trim().toLowerCase();
+    const cleanPass = password.trim();
+
+    if (!cleanUser) {
+      setError('Por favor, digite seu nome de usuário.');
+      return;
+    }
+
+    if (cleanUser.length < 3) {
+      setError('O nome de usuário deve ter pelo menos 3 caracteres.');
+      return;
+    }
+
+    if (!cleanPass) {
+      setError('A senha é obrigatória. Não é permitido entrar sem senha.');
+      return;
+    }
+
+    if (mode === 'register') {
+      if (!displayName.trim()) {
+        setError('Por favor, informe o nome da sua granja ou do produtor.');
+        return;
+      }
+      if (cleanPass.length < 4) {
+        setError('A senha deve ter pelo menos 4 caracteres.');
+        return;
+      }
+      if (cleanPass !== confirmPassword.trim()) {
+        setError('As senhas não coincidem. Digite a mesma senha nos dois campos.');
+        return;
+      }
+    }
+
+    setBusy(true);
     try {
       const endpoint = mode === 'login' ? '/api/auth/login' : '/api/auth/register';
+      const bodyPayload = mode === 'login'
+        ? { username: cleanUser, password: cleanPass }
+        : {
+            username: cleanUser,
+            displayName: displayName.trim(),
+            password: cleanPass,
+          };
+
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: username.trim() || 'suenaga',
-          displayName: displayName.trim() || username.trim() || 'Granja Gabriel Suenaga',
-          password: password.trim(),
-        }),
+        body: JSON.stringify(bodyPayload),
       });
+
       const data = (await res.json()) as { token?: string; user?: AuthUser; error?: string };
       if (!res.ok || !data.token || !data.user) {
-        setError(data.error || 'Não foi possível entrar.');
+        setError(data.error || (mode === 'login' ? 'Usuário ou senha incorretos.' : 'Não foi possível criar a conta.'));
         setBusy(false);
         return;
       }
+
       localStorage.setItem(AUTH_STORAGE_KEY, data.token);
       localStorage.setItem(AUTH_USER_KEY, JSON.stringify(data.user));
       onAuthenticated(data.user, data.token);
     } catch {
-      setError('Erro de conexão com o servidor.');
+      setError('Erro de conexão com o servidor. Verifique sua rede e tente novamente.');
       setBusy(false);
     }
   };
@@ -376,67 +396,46 @@ function LoginScreen({ onAuthenticated }: { onAuthenticated: (user: AuthUser, to
         <div className="login-brand">
           <span className="login-logo"><Egg size={40} /></span>
           <div>
-            <span className="login-kicker">ACESSO LIVRE · SUPABASE MVP</span>
-            <h1>Granja Suenaga</h1>
+            <span className="login-kicker">ACESSO RESTRITO · AUTENTICAÇÃO COM SENHA</span>
+            <h1>Granja Gabriel Suenaga</h1>
           </div>
         </div>
 
-        {/* Card de Acesso Direto sem Senha */}
-        <div style={{ background: '#eaf5ed', border: '2px solid #84cc9a', borderRadius: '16px', padding: '16px', marginBottom: '16px', textAlign: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', color: '#135c34', fontWeight: 800, fontSize: '16px', marginBottom: '4px' }}>
-            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#16a34a', display: 'inline-block' }}></span>
-            Modo MVP Sem Senha
-          </div>
-          <p style={{ margin: '0 0 14px 0', fontSize: '14px', color: '#274332' }}>
-            Acesso liberado para navegação e testes rápidos sem bloqueio de senha.
-          </p>
-          <button
-            type="button"
-            className="button primary giant-btn"
-            style={{ width: '100%', fontSize: '18px', padding: '14px' }}
-            onClick={handleDirectAccess}
-            disabled={busy}
-          >
-            <UserCheck size={26} />
-            {busy ? 'Entrando…' : 'Acessar Granja Gabriel Suenaga'}
-          </button>
-        </div>
-
-        <div className="segmented-giant login-tabs">
+        <div className="segmented-giant login-tabs" style={{ marginBottom: '20px' }}>
           <button
             type="button"
             className={mode === 'login' ? 'selected' : ''}
-            onClick={() => { setMode('login'); setError(null); }}
+            onClick={() => handleModeSwitch('login')}
             data-testid="tab-login"
           >
-            <Lock size={22} /> Entrar com Usuário
+            <Lock size={22} /> Entrar
           </button>
           <button
             type="button"
             className={mode === 'register' ? 'selected' : ''}
-            onClick={() => { setMode('register'); setUsername(''); setPassword(''); setError(null); }}
+            onClick={() => handleModeSwitch('register')}
             data-testid="tab-register"
           >
-            <UserPlus size={22} /> Novo Usuário
+            <UserPlus size={22} /> Criar Conta
           </button>
         </div>
 
         <form className="login-form" onSubmit={e => { void handleSubmit(e); }}>
           <label className="field-label">
-            Nome de Usuário
+            Nome de Usuário (Login)
             <input
               required
               autoFocus
               value={username}
-              onChange={e => setUsername(e.target.value)}
-              placeholder="Ex.: suenaga"
+              onChange={e => setUsername(e.target.value.toLowerCase().replace(/\s+/g, ''))}
+              placeholder="Ex.: gabriel, suenaga, joao"
               data-testid="input-login-username"
             />
           </label>
 
           {mode === 'register' && (
             <label className="field-label">
-              Nome Completo da Granja
+              Nome da Granja ou do Produtor
               <input
                 required
                 value={displayName}
@@ -448,32 +447,83 @@ function LoginScreen({ onAuthenticated }: { onAuthenticated: (user: AuthUser, to
           )}
 
           <label className="field-label">
-            Senha (Opcional no MVP)
+            Senha (Obrigatória)
             <input
+              required
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              placeholder="Opcional (senha desativada para o MVP)"
+              placeholder={mode === 'register' ? 'Crie uma senha (mínimo 4 dígitos)' : 'Digite sua senha cadastrada'}
               data-testid="input-login-password"
             />
           </label>
+
+          {mode === 'register' && (
+            <label className="field-label">
+              Confirmar Senha
+              <input
+                required
+                type="password"
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                placeholder="Repita a senha digitada"
+                data-testid="input-register-confirmpassword"
+              />
+            </label>
+          )}
 
           {error && <div className="login-error" role="alert" data-testid="text-login-error">{error}</div>}
 
           <button
             type="submit"
-            className="button secondary login-submit-btn"
-            disabled={busy || !username.trim()}
+            className="button primary giant-btn login-submit-btn"
+            disabled={busy || !username.trim() || !password.trim()}
             data-testid="button-login-submit"
+            style={{ width: '100%', marginTop: '8px' }}
           >
-            <UserCheck size={26} />
-            {busy ? 'Entrando…' : mode === 'login' ? 'Entrar com este Usuário' : 'Criar e Entrar'}
+            {busy ? (
+              'Processando…'
+            ) : mode === 'login' ? (
+              <>
+                <LogIn size={26} /> Entrar no Sistema
+              </>
+            ) : (
+              <>
+                <UserCheck size={26} /> Criar Conta e Acessar
+              </>
+            )}
           </button>
+
+          <div style={{ textAlign: 'center', marginTop: '14px', fontSize: '15px' }}>
+            {mode === 'login' ? (
+              <span style={{ color: '#555' }}>
+                Não tem uma conta cadastrada?{' '}
+                <button
+                  type="button"
+                  style={{ background: 'none', border: 'none', color: '#135c34', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
+                  onClick={() => handleModeSwitch('register')}
+                >
+                  Criar conta agora
+                </button>
+              </span>
+            ) : (
+              <span style={{ color: '#555' }}>
+                Já possui uma conta cadastrada?{' '}
+                <button
+                  type="button"
+                  style={{ background: 'none', border: 'none', color: '#135c34', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
+                  onClick={() => handleModeSwitch('login')}
+                >
+                  Fazer Login
+                </button>
+              </span>
+            )}
+          </div>
         </form>
 
         <div className="login-footer">
           <Database size={20} />
-          <span>{status?.connected ? 'Banco Supabase Conectado e Ativo' : 'Conectando ao Supabase…'}</span>
+          <span>{status?.connected ? 'Banco Supabase Conectado e Protegido' : 'Conectando ao Supabase…'}</span>
         </div>
       </div>
     </div>

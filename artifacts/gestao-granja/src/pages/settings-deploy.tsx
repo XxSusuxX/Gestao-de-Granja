@@ -301,7 +301,7 @@ export function SettingsAndDeployScreen({ user, onUpdateUser, onGoToSlide }: Set
               </div>
               <div style={{ background: '#f5f7f2', border: '1px solid #d1dbc8', borderRadius: '12px', padding: '12px' }}>
                 <small style={{ color: '#5b7063', display: 'block', fontSize: '12px', textTransform: 'uppercase' }}>Modo de Acesso</small>
-                <strong style={{ fontSize: '14px', color: '#166534' }}>MVP Livre (Sem senha)</strong>
+                <strong style={{ fontSize: '14px', color: '#166534' }}>Conta & Senha Obrigatória</strong>
               </div>
               <div style={{ background: '#f5f7f2', border: '1px solid #d1dbc8', borderRadius: '12px', padding: '12px' }}>
                 <small style={{ color: '#5b7063', display: 'block', fontSize: '12px', textTransform: 'uppercase' }}>Protocolo</small>
