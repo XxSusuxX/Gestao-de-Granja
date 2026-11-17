@@ -1,6 +1,6 @@
 {
   "name": "gestao-suenaga-granja",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Sistema completo de Gestão de Granja — Controle de Estoque, Plantel de Aves, Receitas de Ração, Alimentação Diária e Financeiro conectado ao Supabase",
   "license": "MIT",
   "private": true,

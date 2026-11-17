@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Camera, Check, ChevronLeft, ChevronRight,
@@ -295,7 +296,17 @@ function useSystemStatus() {
 }
 
 function Modal({ title, eyebrow, children, onClose }: { title: string; eyebrow: string; children: ReactNode; onClose: () => void }) {
-  return (
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, []);
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <div
       className="modal-backdrop"
       role="presentation"
@@ -323,7 +334,8 @@ function Modal({ title, eyebrow, children, onClose }: { title: string; eyebrow: 
           {children}
         </div>
       </section>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -701,32 +713,34 @@ function ProductForm({
       />
 
       <div className="photo-picker-box">
-        {imageData ? (
-          <img
-            src={imageData}
-            alt="Prévia do produto"
-            className="photo-preview-thumb"
-            data-testid="img-product-preview"
-          />
-        ) : (
-          <div className="photo-placeholder">
-            <Camera size={32} />
-          </div>
-        )}
-        <div className="photo-picker-info">
-          <b>{imageData ? 'Imagem do produto pronta' : 'Identificador por Imagem'}</b>
-          <span>Abra a galeria (celular ou PC) para preencher tudo automático</span>
-          {onOpenAiConfig && (
-            <button
-              type="button"
-              className="ai-config-link"
-              onClick={onOpenAiConfig}
-            >
-              {localStorage.getItem(GEMINI_STORAGE_KEY)
-                ? '🟢 IA Gemini Vision Conectada'
-                : '🔑 Conectar IA Gemini (Conta garrafas e lê rótulos)'}
-            </button>
+        <div className="photo-picker-header">
+          {imageData ? (
+            <img
+              src={imageData}
+              alt="Prévia do produto"
+              className="photo-preview-thumb"
+              data-testid="img-product-preview"
+            />
+          ) : (
+            <div className="photo-placeholder">
+              <Camera size={28} />
+            </div>
           )}
+          <div className="photo-picker-info">
+            <b>{imageData ? 'Imagem do produto pronta' : 'Identificador por Imagem'}</b>
+            <span>Tire foto ou escolha da galeria para preenchimento automático</span>
+            {onOpenAiConfig && (
+              <button
+                type="button"
+                className="ai-config-link"
+                onClick={onOpenAiConfig}
+              >
+                {localStorage.getItem(GEMINI_STORAGE_KEY)
+                  ? '🟢 IA Gemini Conectada'
+                  : '🔑 Conectar IA Gemini (Conta garrafas e lê rótulos)'}
+              </button>
+            )}
+          </div>
         </div>
         <button
           type="button"
@@ -735,8 +749,8 @@ function ProductForm({
           disabled={analyzingImage}
           data-testid="button-upload-product-image"
         >
-          <ImagePlus size={24} />
-          {analyzingImage ? 'Analisando…' : imageData ? 'Trocar Imagem' : 'Adicionar Imagem'}
+          <ImagePlus size={22} />
+          <span>{analyzingImage ? 'Analisando Imagem…' : imageData ? 'Trocar Imagem' : 'Adicionar Imagem'}</span>
         </button>
       </div>
 

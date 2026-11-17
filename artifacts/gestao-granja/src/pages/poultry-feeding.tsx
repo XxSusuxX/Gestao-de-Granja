@@ -1,4 +1,5 @@
 import { useState, useEffect, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useGetPoultrySummary, getGetPoultrySummaryQueryKey, useGetPoultryLots, getGetPoultryLotsQueryKey,
@@ -33,7 +34,17 @@ function useRefresh() {
 }
 
 function FormModal({ title, eyebrow, close, children }: { title: string; eyebrow: string; close: () => void; children: ReactNode }) {
-  return (
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, []);
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <div
       className="modal-backdrop"
       role="presentation"
@@ -61,7 +72,8 @@ function FormModal({ title, eyebrow, close, children }: { title: string; eyebrow
           {children}
         </div>
       </section>
-    </div>
+    </div>,
+    document.body
   );
 }
 
