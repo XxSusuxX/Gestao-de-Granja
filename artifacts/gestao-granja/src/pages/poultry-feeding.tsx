@@ -142,20 +142,9 @@ export function PoultryPage() {
   const [editing, setEditing] = useState<PoultryLot>();
   const [selectedLot, setSelectedLot] = useState<PoultryLot>();
   const [subView, setSubView] = useState<'lots' | 'history'>('lots');
-  const [page, setPage] = useState(0);
 
   const lots = lotsQuery.data ?? [];
   const movements = (movesQuery.data ?? []).slice().sort((a, b) => +new Date(b.movementDate) - +new Date(a.movementDate));
-
-  const perPage = 2;
-  const totalLotPages = Math.max(1, Math.ceil(lots.length / perPage));
-  const safeLotPage = Math.min(page, totalLotPages - 1);
-  const visibleLots = lots.slice(safeLotPage * perPage, (safeLotPage + 1) * perPage);
-
-  const movesPerPage = 3;
-  const totalMovePages = Math.max(1, Math.ceil(movements.length / movesPerPage));
-  const safeMovePage = Math.min(page, totalMovePages - 1);
-  const visibleMoves = movements.slice(safeMovePage * movesPerPage, (safeMovePage + 1) * movesPerPage);
 
   const saveLot = (d: { label: string; kind: PoultryLot['kind']; receivedAt: string; source: string; breed: string; ageWeeks?: number; initialCount?: number }) => {
     if (editing) updateLot.mutate({ lotId: editing.id, data: { label: d.label, source: d.source || null, breed: d.breed || null, ageWeeks: d.ageWeeks ?? null } }, { onSuccess: () => { refresh(getGetPoultryLotsQueryKey(), getGetPoultrySummaryQueryKey()); setModal(null); setEditing(undefined); } });
@@ -187,36 +176,22 @@ export function PoultryPage() {
 
     <div className="subview-bar">
       <div className="segmented-giant">
-        <button type="button" className={subView === 'lots' ? 'selected' : ''} onClick={() => { setSubView('lots'); setPage(0); }}>
+        <button type="button" className={subView === 'lots' ? 'selected' : ''} onClick={() => setSubView('lots')}>
           Lotes ({lots.length})
         </button>
-        <button type="button" className={subView === 'history' ? 'selected' : ''} onClick={() => { setSubView('history'); setPage(0); }}>
+        <button type="button" className={subView === 'history' ? 'selected' : ''} onClick={() => setSubView('history')}>
           Saídas e Chegadas ({movements.length})
         </button>
       </div>
-      {subView === 'lots' && totalLotPages > 1 && (
-        <div className="pager-controls">
-          <button type="button" className="pager-btn" disabled={safeLotPage <= 0} onClick={() => setPage(p => Math.max(0, p - 1))}><ChevronLeft size={26} /></button>
-          <span>{safeLotPage + 1} / {totalLotPages}</span>
-          <button type="button" className="pager-btn" disabled={safeLotPage >= totalLotPages - 1} onClick={() => setPage(p => Math.min(totalLotPages - 1, p + 1))}><ChevronRight size={26} /></button>
-        </div>
-      )}
-      {subView === 'history' && totalMovePages > 1 && (
-        <div className="pager-controls">
-          <button type="button" className="pager-btn" disabled={safeMovePage <= 0} onClick={() => setPage(p => Math.max(0, p - 1))}><ChevronLeft size={26} /></button>
-          <span>{safeMovePage + 1} / {totalMovePages}</span>
-          <button type="button" className="pager-btn" disabled={safeMovePage >= totalMovePages - 1} onClick={() => setPage(p => Math.min(totalMovePages - 1, p + 1))}><ChevronRight size={26} /></button>
-        </div>
-      )}
     </div>
 
     <div className="screen-body">
       {subView === 'lots' ? (
         lotsQuery.isLoading ? <div className="giant-empty">Carregando lotes…</div> :
         lotsQuery.isError ? <div className="giant-empty"><button className="button secondary" onClick={() => { void lotsQuery.refetch(); }} data-testid="button-retry"><RotateCcw size={24} /> Tentar de novo</button></div> :
-        visibleLots.length === 0 ? <div className="giant-empty"><p>Nenhum lote cadastrado.</p><button className="button primary giant-btn" onClick={() => setModal('lot')}><Plus size={26} /> Cadastrar 1º Lote</button></div> :
+        lots.length === 0 ? <div className="giant-empty"><p>Nenhum lote cadastrado.</p><button className="button primary giant-btn" onClick={() => setModal('lot')}><Plus size={26} /> Cadastrar 1º Lote</button></div> :
         <div className="giant-cards-grid two-cols">
-          {visibleLots.map(lot => (
+          {lots.map(lot => (
             <article className="giant-lot-card" key={lot.id} data-testid={`card-poultry-lot-${lot.id}`}>
               <div className="giant-lot-top">
                 <span className="giant-icon-box"><Bird size={32} /></span>
@@ -241,9 +216,9 @@ export function PoultryPage() {
           ))}
         </div>
       ) : (
-        visibleMoves.length === 0 ? <div className="giant-empty">Nenhuma movimentação registrada.</div> :
+        movements.length === 0 ? <div className="giant-empty">Nenhuma movimentação registrada.</div> :
         <div className="giant-list">
-          {visibleMoves.map(m => (
+          {movements.map(m => (
             <div className="giant-list-row" key={m.id} data-testid={`row-poultry-movement-${m.id}`}>
               <span className={`giant-dir-badge ${m.direction}`}>
                 {m.direction === 'in' ? <ArrowDownLeft size={26} /> : <ArrowUpRight size={26} />}
@@ -826,23 +801,12 @@ export function FeedingPage() {
   const [modal, setModal] = useState<'recipe' | 'log' | 'add-stock' | null>(null);
   const [editing, setEditing] = useState<FeedRecipe>();
   const [subView, setSubView] = useState<'recipes' | 'logs'>('recipes');
-  const [page, setPage] = useState(0);
 
   const recipes = recipesQuery.data ?? [];
   const logs = (logsQuery.data ?? []).slice().sort((a, b) => +new Date(b.feedingDate) - +new Date(a.feedingDate));
   const feedProducts = (productsQuery.data ?? []).filter(
     (p) => p.category === 'feed' && (p.unit.toLowerCase().includes('kg') || p.unit.toLowerCase() === 'quilo')
   );
-
-  const perPage = 2;
-  const totalRecipePages = Math.max(1, Math.ceil(recipes.length / perPage));
-  const safeRecipePage = Math.min(page, totalRecipePages - 1);
-  const visibleRecipes = recipes.slice(safeRecipePage * perPage, (safeRecipePage + 1) * perPage);
-
-  const logsPerPage = 3;
-  const totalLogPages = Math.max(1, Math.ceil(logs.length / logsPerPage));
-  const safeLogPage = Math.min(page, totalLogPages - 1);
-  const visibleLogs = logs.slice(safeLogPage * logsPerPage, (safeLogPage + 1) * logsPerPage);
 
   const invalidateRecipe = () => refresh(getGetFeedRecipesQueryKey(), getGetProductsQueryKey(), getGetDashboardQueryKey());
 
@@ -973,75 +937,23 @@ export function FeedingPage() {
           <button
             type="button"
             className={subView === 'recipes' ? 'selected' : ''}
-            onClick={() => {
-              setSubView('recipes');
-              setPage(0);
-            }}
+            onClick={() => setSubView('recipes')}
           >
             Receitas de Ração ({recipes.length})
           </button>
           <button
             type="button"
             className={subView === 'logs' ? 'selected' : ''}
-            onClick={() => {
-              setSubView('logs');
-              setPage(0);
-            }}
+            onClick={() => setSubView('logs')}
           >
             Consumo Diário ({logs.length})
           </button>
         </div>
-        {subView === 'recipes' && totalRecipePages > 1 && (
-          <div className="pager-controls">
-            <button
-              type="button"
-              className="pager-btn"
-              disabled={safeRecipePage <= 0}
-              onClick={() => setPage((p) => Math.max(0, p - 1))}
-            >
-              <ChevronLeft size={26} />
-            </button>
-            <span>
-              {safeRecipePage + 1} / {totalRecipePages}
-            </span>
-            <button
-              type="button"
-              className="pager-btn"
-              disabled={safeRecipePage >= totalRecipePages - 1}
-              onClick={() => setPage((p) => Math.min(totalRecipePages - 1, p + 1))}
-            >
-              <ChevronRight size={26} />
-            </button>
-          </div>
-        )}
-        {subView === 'logs' && totalLogPages > 1 && (
-          <div className="pager-controls">
-            <button
-              type="button"
-              className="pager-btn"
-              disabled={safeLogPage <= 0}
-              onClick={() => setPage((p) => Math.max(0, p - 1))}
-            >
-              <ChevronLeft size={26} />
-            </button>
-            <span>
-              {safeLogPage + 1} / {totalLogPages}
-            </span>
-            <button
-              type="button"
-              className="pager-btn"
-              disabled={safeLogPage >= totalLogPages - 1}
-              onClick={() => setPage((p) => Math.min(totalLogPages - 1, p + 1))}
-            >
-              <ChevronRight size={26} />
-            </button>
-          </div>
-        )}
       </div>
 
       <div className="screen-body">
         {subView === 'recipes' ? (
-          visibleRecipes.length === 0 ? (
+          recipes.length === 0 ? (
             <div className="giant-empty">
               <p>Nenhuma ração ou receita cadastrada ainda.</p>
               <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginTop: 12 }}>
@@ -1061,7 +973,7 @@ export function FeedingPage() {
             </div>
           ) : (
             <div className="giant-cards-grid two-cols">
-              {visibleRecipes.map((r) => (
+              {recipes.map((r) => (
                 <article className="giant-lot-card" key={r.id} data-testid={`card-recipe-${r.id}`}>
                   <div className="giant-lot-top">
                     <span className="giant-icon-box amber">
@@ -1116,7 +1028,7 @@ export function FeedingPage() {
               ))}
             </div>
           )
-        ) : visibleLogs.length === 0 ? (
+        ) : logs.length === 0 ? (
           <div className="giant-empty">
             <p>Nenhum trato registrado.</p>
             <button className="button primary giant-btn" onClick={() => setModal('log')}>
@@ -1125,7 +1037,7 @@ export function FeedingPage() {
           </div>
         ) : (
           <div className="giant-list">
-            {visibleLogs.map((log) => (
+            {logs.map((log) => (
               <article className="giant-list-row" key={log.id} data-testid={`row-feed-log-${log.id}`}>
                 <span className="giant-dir-badge in">
                   <Wheat size={26} />

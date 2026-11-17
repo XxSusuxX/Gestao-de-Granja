@@ -1096,7 +1096,6 @@ function StockScreen() {
   const [movementPref, setMovementPref] = useState<{ direction: 'in' | 'out'; productId?: number }>({ direction: 'in' });
   const [filter, setFilter] = useState('todos');
   const [subView, setSubView] = useState<'products' | 'movements'>('products');
-  const [page, setPage] = useState(0);
 
   const [showGeminiModal, setShowGeminiModal] = useState(false);
   const [geminiApiKey, setGeminiApiKey] = useState(() => localStorage.getItem(GEMINI_STORAGE_KEY) || '');
@@ -1105,12 +1104,7 @@ function StockScreen() {
   const list = products ?? [];
   const filteredProducts = useMemo(() => list.filter(p => filter === 'todos' || p.category === filter), [list, filter]);
 
-  // For movements (histórico): keep pagination
-  const perPage = 3;
   const allMovements = (movements ?? []).slice().sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
-  const totalMovePages = Math.max(1, Math.ceil(allMovements.length / perPage));
-  const safeMovePage = Math.min(page, totalMovePages - 1);
-  const visibleMovements = allMovements.slice(safeMovePage * perPage, (safeMovePage + 1) * perPage);
 
   const handleQuickPhotoSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1242,10 +1236,10 @@ function StockScreen() {
 
       <div className="subview-bar">
         <div className="segmented-giant">
-          <button type="button" className={subView === 'products' ? 'selected' : ''} onClick={() => { setSubView('products'); setPage(0); }}>
+          <button type="button" className={subView === 'products' ? 'selected' : ''} onClick={() => setSubView('products')}>
             Estoque ({filteredProducts.length})
           </button>
-          <button type="button" className={subView === 'movements' ? 'selected' : ''} onClick={() => { setSubView('movements'); setPage(0); }}>
+          <button type="button" className={subView === 'movements' ? 'selected' : ''} onClick={() => setSubView('movements')}>
             Histórico ({allMovements.length})
           </button>
         </div>
@@ -1253,18 +1247,10 @@ function StockScreen() {
         {subView === 'products' && (
           <div className="filter-pills-giant">
             {cats.map(([key, label]) => (
-              <button key={key} type="button" onClick={() => { setFilter(key); setPage(0); }} className={`giant-filter-pill ${filter === key ? 'selected' : ''}`}>
+              <button key={key} type="button" onClick={() => setFilter(key)} className={`giant-filter-pill ${filter === key ? 'selected' : ''}`}>
                 {label}
               </button>
             ))}
-          </div>
-        )}
-
-        {subView === 'movements' && totalMovePages > 1 && (
-          <div className="pager-controls">
-            <button type="button" className="pager-btn" disabled={safeMovePage <= 0} onClick={() => setPage(p => Math.max(0, p - 1))}><ChevronLeft size={26} /></button>
-            <span>{safeMovePage + 1} / {totalMovePages}</span>
-            <button type="button" className="pager-btn" disabled={safeMovePage >= totalMovePages - 1} onClick={() => setPage(p => Math.min(totalMovePages - 1, p + 1))}><ChevronRight size={26} /></button>
           </div>
         )}
       </div>
@@ -1303,9 +1289,9 @@ function StockScreen() {
             })}
           </div>
         ) : (
-          visibleMovements.length === 0 ? <div className="giant-empty">Nenhum movimento registrado.</div> :
+          allMovements.length === 0 ? <div className="giant-empty">Nenhum movimento registrado.</div> :
           <div className="giant-list">
-            {visibleMovements.map(m => (
+            {allMovements.map(m => (
               <div className="giant-list-row" key={m.id}>
                 <span className={`giant-dir-badge ${m.direction}`}><ArrowLeftRight size={26} /></span>
                 <div className="giant-row-main">
@@ -1450,17 +1436,11 @@ function FinanceScreen() {
   const [modal, setModal] = useState(false);
   const [editing, setEditing] = useState<FinanceEntry | undefined>();
   const [tab, setTab] = useState<'all' | 'payable' | 'receivable'>('all');
-  const [page, setPage] = useState(0);
 
   const rows = entries ?? [];
   const filtered = rows.filter(e => tab === 'all' || e.kind === tab).sort((a, b) => +new Date(a.dueDate) - +new Date(b.dueDate));
   const payables = rows.filter(e => e.kind === 'payable' && e.status === 'pending').reduce((s, e) => s + e.amount, 0);
   const receivables = rows.filter(e => e.kind === 'receivable' && e.status === 'pending').reduce((s, e) => s + e.amount, 0);
-
-  const perPage = 3;
-  const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
-  const safePage = Math.min(page, totalPages - 1);
-  const visibleEntries = filtered.slice(safePage * perPage, (safePage + 1) * perPage);
   const currentDay = today();
 
   const save = (input: { kind: 'payable' | 'receivable'; description: string; amount: number; dueDate: string; category: string }) => {
@@ -1494,26 +1474,18 @@ function FinanceScreen() {
 
       <div className="subview-bar">
         <div className="segmented-giant">
-          <button type="button" className={tab === 'all' ? 'selected' : ''} onClick={() => { setTab('all'); setPage(0); }}>Todas ({rows.length})</button>
-          <button type="button" className={tab === 'payable' ? 'selected' : ''} onClick={() => { setTab('payable'); setPage(0); }}>A Pagar</button>
-          <button type="button" className={tab === 'receivable' ? 'selected' : ''} onClick={() => { setTab('receivable'); setPage(0); }}>A Receber</button>
+          <button type="button" className={tab === 'all' ? 'selected' : ''} onClick={() => setTab('all')}>Todas ({rows.length})</button>
+          <button type="button" className={tab === 'payable' ? 'selected' : ''} onClick={() => setTab('payable')}>A Pagar</button>
+          <button type="button" className={tab === 'receivable' ? 'selected' : ''} onClick={() => setTab('receivable')}>A Receber</button>
         </div>
-
-        {totalPages > 1 && (
-          <div className="pager-controls">
-            <button type="button" className="pager-btn" disabled={safePage <= 0} onClick={() => setPage(p => Math.max(0, p - 1))}><ChevronLeft size={26} /></button>
-            <span>{safePage + 1} / {totalPages}</span>
-            <button type="button" className="pager-btn" disabled={safePage >= totalPages - 1} onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}><ChevronRight size={26} /></button>
-          </div>
-        )}
       </div>
 
       <div className="screen-body">
         {isLoading ? <div className="giant-empty">Carregando contas…</div> :
         isError ? <div className="giant-empty"><button className="button secondary" onClick={() => { void refetch(); }}>Tentar de novo</button></div> :
-        visibleEntries.length === 0 ? <div className="giant-empty"><p>Nenhuma conta nesta aba.</p><button className="button primary giant-btn" onClick={() => setModal(true)}><Plus size={26} /> Anotar 1ª Conta</button></div> :
+        filtered.length === 0 ? <div className="giant-empty"><p>Nenhuma conta nesta aba.</p><button className="button primary giant-btn" onClick={() => setModal(true)}><Plus size={26} /> Anotar 1ª Conta</button></div> :
         <div className="giant-list">
-          {visibleEntries.map(entry => {
+          {filtered.map(entry => {
             const isOverdue = entry.status === 'pending' && entry.dueDate.slice(0, 10) < currentDay;
             return (
               <article className={`giant-list-row ${entry.status === 'settled' ? 'settled-row' : ''}`} key={entry.id} data-testid={`row-finance-${entry.id}`}>
