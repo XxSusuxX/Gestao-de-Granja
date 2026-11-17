@@ -1168,6 +1168,16 @@ body,
   color: #a12c19;
 }
 
+.card {
+  background: #fffdf8;
+  border: 3px solid #d5ddd0;
+  border-radius: 24px;
+  box-shadow: 0 4px 16px rgba(24, 48, 36, 0.05);
+  box-sizing: border-box;
+  flex: none;
+  min-height: min-content;
+}
+
 .giant-cards-grid.two-cols {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2152,6 +2162,11 @@ body,
   }
 
   /* Lot Cards (Aves e Ração) */
+  .card {
+    padding: 16px !important;
+    border-radius: 18px !important;
+    border-width: 2px !important;
+  }
   .giant-cards-grid.two-cols {
     display: flex;
     flex-direction: column;

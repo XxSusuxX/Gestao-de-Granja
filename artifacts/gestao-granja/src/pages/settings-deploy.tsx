@@ -195,7 +195,7 @@ export function SettingsAndDeployScreen({ user, onUpdateUser, onGoToSlide }: Set
   }, [subView]);
 
   return (
-    <div className="screen-content" data-testid="screen-settings-deploy">
+    <div className="screen-panel scrollable-stock-panel" data-testid="screen-settings-deploy">
       <div className="screen-header">
         <div>
           <span className="screen-kicker">
@@ -205,34 +205,37 @@ export function SettingsAndDeployScreen({ user, onUpdateUser, onGoToSlide }: Set
         </div>
       </div>
 
-      <div className="segmented-giant" style={{ marginBottom: '24px' }}>
-        <button
-          type="button"
-          className={subView === 'config' ? 'selected' : ''}
-          onClick={() => setSubView('config')}
-        >
-          <Settings size={24} /> Configurações
-        </button>
-        <button
-          type="button"
-          className={subView === 'users' ? 'selected' : ''}
-          onClick={() => setSubView('users')}
-        >
-          <ShieldCheck size={24} /> Contas Registradas ({adminUsers.length || '…'})
-        </button>
-        <button
-          type="button"
-          className={subView === 'deploy' ? 'selected' : ''}
-          onClick={() => setSubView('deploy')}
-        >
-          <Rocket size={24} /> Deploy & Vercel
-        </button>
+      <div className="subview-bar">
+        <div className="segmented-giant">
+          <button
+            type="button"
+            className={subView === 'config' ? 'selected' : ''}
+            onClick={() => setSubView('config')}
+          >
+            <Settings size={24} /> Configurações
+          </button>
+          <button
+            type="button"
+            className={subView === 'users' ? 'selected' : ''}
+            onClick={() => setSubView('users')}
+          >
+            <ShieldCheck size={24} /> Contas Registradas ({adminUsers.length || '…'})
+          </button>
+          <button
+            type="button"
+            className={subView === 'deploy' ? 'selected' : ''}
+            onClick={() => setSubView('deploy')}
+          >
+            <Rocket size={24} /> Deploy & Vercel
+          </button>
+        </div>
       </div>
 
-      {subView === 'config' ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          {/* Card 1: Identificação da Granja */}
-          <form className="card" onSubmit={handleSaveFarmConfig} style={{ padding: '24px' }}>
+      <div className="screen-body" style={{ minHeight: 'min-content', overflow: 'visible', paddingBottom: '48px' }}>
+        {subView === 'config' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', minHeight: 'min-content' }}>
+            {/* Card 1: Identificação da Granja */}
+            <form className="card" onSubmit={handleSaveFarmConfig} style={{ padding: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
               <div style={{ background: '#203b30', color: '#fff', padding: '10px', borderRadius: '12px' }}>
                 <Server size={24} />
@@ -368,8 +371,8 @@ export function SettingsAndDeployScreen({ user, onUpdateUser, onGoToSlide }: Set
           </div>
         </div>
       ) : subView === 'users' ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div className="card" style={{ padding: '24px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', minHeight: 'min-content' }}>
+          <div className="card" style={{ padding: '24px', overflow: 'visible' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{ background: '#203b30', color: '#eed788', padding: '10px', borderRadius: '12px' }}>
@@ -397,32 +400,34 @@ export function SettingsAndDeployScreen({ user, onUpdateUser, onGoToSlide }: Set
             ) : adminUsers.length === 0 ? (
               <div className="giant-empty" style={{ padding: '30px' }}>Nenhuma conta encontrada.</div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                {adminUsers.map((u) => {
+              <div className="giant-list" style={{ overflow: 'visible', minHeight: 'min-content', gap: '14px' }}>
+                {adminUsers.map((u, idx) => {
                   const isCurrent = u.id === user.id;
                   const dateStr = u.createdAt ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(u.createdAt)) : '—';
                   return (
                     <article
                       key={u.id}
+                      className="giant-lot-card"
                       style={{
                         padding: '18px 20px',
-                        borderRadius: '14px',
-                        background: isCurrent ? '#f0fdf4' : '#fafafa',
-                        border: `2px solid ${isCurrent ? '#86efac' : '#e5e7eb'}`,
+                        borderRadius: '16px',
+                        background: isCurrent ? '#f0fdf4' : '#fffdf8',
+                        border: `2px solid ${isCurrent ? '#86efac' : '#d5ddd0'}`,
                         display: 'flex',
                         flexDirection: 'column',
                         gap: '12px',
+                        animationDelay: `${Math.min(idx * 30, 240)}ms`,
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                           <span style={{ background: '#203b30', color: '#fff', padding: '6px 12px', borderRadius: '8px', fontWeight: 800, fontSize: '14px' }}>
                             ID #{u.id}
                           </span>
-                          <strong style={{ fontSize: '18px', color: '#16382b' }}>@{u.username}</strong>
-                          <span style={{ color: '#4b6354', fontWeight: 600 }}>({u.displayName})</span>
+                          <strong style={{ fontSize: '19px', color: '#16382b' }}>@{u.username}</strong>
+                          <span style={{ color: '#4b6354', fontWeight: 700 }}>({u.displayName})</span>
                           {isCurrent && (
-                            <span style={{ background: '#16a34a', color: '#fff', padding: '3px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 700 }}>
+                            <span style={{ background: '#16a34a', color: '#fff', padding: '4px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 700 }}>
                               Sua Sessão Atual
                             </span>
                           )}
@@ -430,7 +435,7 @@ export function SettingsAndDeployScreen({ user, onUpdateUser, onGoToSlide }: Set
                         <small style={{ color: '#6b7280', fontSize: '13px' }}>Cadastrado em: {dateStr}</small>
                       </div>
 
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                         <span style={{ background: '#fff', border: '1px solid #d1d5db', padding: '6px 12px', borderRadius: '10px', fontSize: '14px', fontWeight: 600 }}>
                           📦 Produtos em Estoque: <b>{u.productCount}</b>
                         </span>
@@ -455,7 +460,7 @@ export function SettingsAndDeployScreen({ user, onUpdateUser, onGoToSlide }: Set
           </div>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', minHeight: 'min-content' }}>
           {/* Card 1: Status da Produção Vercel */}
           <div className="card" style={{ padding: '24px', border: '2px solid #38a169', background: 'linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px', marginBottom: '16px' }}>
@@ -623,6 +628,7 @@ export function SettingsAndDeployScreen({ user, onUpdateUser, onGoToSlide }: Set
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }
